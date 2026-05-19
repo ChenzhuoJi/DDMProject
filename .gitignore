@@ -1,0 +1,14 @@
+# 系统文件
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# 无法删除的遗留文件（已在 07_Dream7B/ 中）
+/Dream 7B Diffusion Large Language Models.pdf
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
