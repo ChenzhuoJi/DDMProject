@@ -43,6 +43,14 @@ HF_ENDPOINT=https://hf-mirror.com pdf2zh paper.pdf -o translated/
 
 - 远程: `git@github.com:ChenzhuoJi/DDMProject.git`
 - 根目录残留 `Dream 7B Diffusion Large Language Models.pdf` 因权限无法删除，已在 `.gitignore` 中排除
+- **提交信息格式**：`<prefix>: <中文描述>`
+  | prefix | 适用场景 |
+  |--------|----------|
+  | `feat` | 新增论文、源码、功能文件 |
+  | `fix` | 修复错误或格式问题 |
+  | `docs` | 更新文档（README、AGENTS.md、Summary） |
+  | `chore` | 仓库维护（gitignore、结构整理） |
+  - 示例：`feat: 添加 Cola DLM 论文及摘要` / `docs: 更新 README 论文清单`
 
 ## Tech stack
 
