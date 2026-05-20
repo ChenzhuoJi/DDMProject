@@ -7,6 +7,9 @@ Thumbs.db
 # 无法删除的遗留文件（已在 07_Dream7B/ 中）
 /Dream 7B Diffusion Large Language Models.pdf
 
+# Obsidian
+.obsidian/
+
 # Python
 __pycache__/
 *.pyc
