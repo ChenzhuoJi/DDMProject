@@ -22,6 +22,10 @@ Spring 2026《随机过程》— 问题导向的研讨式学习
 │   ├── *-dual.pdf                 # 左右对照版（原文 + 中文）
 │   ├── *-mono.pdf                 # 纯中文版
 │   └── ...
+├── conv_visualization/            # Conv2d 可视化交互工具
+│   ├── app.py                     # Gradio + Matplotlib 交互界面
+│   ├── CONV2D_GUIDE.md            # 参数详解文档（含公式、规律、典型组合）
+│   └── requirements.txt           # 依赖
 ├── Literature_Summary.md          # 8篇论文摘要汇总与脉络关系
 └── README.md                      # 本文件
 ```
