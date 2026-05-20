@@ -14,7 +14,7 @@ Spring 2026《随机过程》— 问题导向的研讨式学习
 ├── 08_ColaDLM/                   # 附加论文（非大作业指定，前沿扩展），含：
 │   ├── *.pdf                      # 论文原文
 │   ├── *.md                       # MinerU 解析
-│   ├── *.py / *.ipynb             # 官方源码（D3PM 已有，其余可补充）
+│   ├── *.py / *.ipynb             # 官方源码（D3PM、CTMC 已有，其余可补充）
 │   └── ...
 ├── translated/                    # pdf2zh 中英对照翻译版
 │   ├── *-dual.pdf                 # 左右对照版（原文 + 中文）
@@ -30,7 +30,7 @@ Spring 2026《随机过程》— 问题导向的研讨式学习
 |---|------|------|------|------|
 | 00 | Requirement | 大作业要求文档 | — | — |
 | 01 | D3PM | Structured Denoising Diffusion Models in Discrete State-Spaces | NeurIPS 2021 | ✅ `src/` |
-| 02 | CTMC | A Continuous Time Framework for Discrete Denoising Models | NeurIPS 2022 | — |
+| 02 | CTMC | A Continuous Time Framework for Discrete Denoising Models | NeurIPS 2022 | ✅ `src/` |
 | 03 | UD3 | Unified Discrete Diffusion for Categorical Data | JMLR 2025 | — |
 | 04 | MD4 | Simplified and Generalized Masked Diffusion for Discrete Data | NeurIPS 2024 | — |
 | 05 | MDLM | Simple and Effective Masked Diffusion Language Models | NeurIPS 2024 | — |
