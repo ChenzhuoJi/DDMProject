@@ -1,150 +1,151 @@
-# 01 — UD3 Code Architecture Overview
+# 01 — UD3 代码架构总览
 
-## File Structure
+## 文件结构
 
-The entire USD3 (Unified Discrete Diffusion for Categorical Data) implementation is a single file:
-
-```
-discrete_diffusion.py  (699 lines)
-```
-
-It contains no neural network definitions — only the diffusion **process** logic. The user must provide a `denoising_fn` (a PyTorch network) separately.
-
-## Code Layout
+USD3 (Unified Discrete Diffusion for Categorical Data) 的实现仅一个文件：
 
 ```
-1. Probability Helpers     (lines 8–26)    — sampling & softmax utilities
-2. Index Helpers           (lines 28–62)   — tensor gather / scatter
-3. Noise Schedule          (lines 64–118)  — 6 schedule types
-4. UnifiedDiscreteDiffusion (lines 120–699) — main class
-   ├── Forward process     (q-distributions)
-   ├── Backward process    (p-distributions, analytical + log-space)
-   ├── Loss: discrete-time (ELBO + CE)
-   ├── Loss: continuous-time (ELBO + CE)
-   ├── MCMC corrector      (Gibbs-like refinement)
-   └── Sampling loop       (T → 0 ancestral sampling)
+discrete_diffusion.py  (699 行)
 ```
 
-## Key Design Idea: Unified Discrete & Continuous Time
+该文件不含任何神经网络定义，仅包含扩散**过程**的逻辑。用户需自行提供 `denoising_fn`（PyTorch 网络）。
 
-The `num_steps` parameter controls the time regime:
+## 代码布局
 
-| `num_steps` | Time regime    | Loss used                     |
-|-------------|----------------|-------------------------------|
-| `0`         | Continuous-time| `continuous_time_loss()`      |
-| `> 0`       | Discrete-time  | `discrete_time_loss()`        |
+```
+1. 概率辅助函数     (8–26 行)   — 采样、softmax 工具
+2. 索引辅助函数     (28–62 行)  — tensor gather / scatter
+3. 噪声调度         (64–118 行) — 6 种调度类型
+4. UnifiedDiscreteDiffusion (120–699 行) — 主类
+   ├── 前向过程     (q 分布)
+   ├── 反向过程     (p 分布，含概率空间与对数空间)
+   ├── 损失：离散时间 (ELBO + CE)
+   ├── 损失：连续时间 (ELBO + CE)
+   ├── MCMC 校正器  (类似 Gibbs 的细化解)
+   └── 采样循环     (T → 0 祖先采样)
+```
 
-This unification is a core contribution of the UD3 paper.
+## 核心设计：离散与连续时间统一
 
-## Noise Distribution `m`
+`num_steps` 参数控制时间模式：
 
-The `m` argument is the **stationary noise distribution**. It can be:
+| `num_steps` | 时间模式     | 使用损失                      |
+|-------------|-------------|-------------------------------|
+| `0`         | 连续时间     | `continuous_time_loss()`      |
+| `> 0`       | 离散时间     | `discrete_time_loss()`        |
 
-- `None` → uniform over `num_classes`
-- A 1D tensor `(C,)` → shared across all positions
-- A full tensor `(B, ..., C)` → per-position noise
+这一统一是 UD3 论文的核心贡献之一。
 
-It appears in every forward, backward, and loss function, and is also used as the prior `p(x_T)`.
+## 噪声分布 `m`
 
-## Noise Schedules (6 types)
+`m` 参数表示**稳态噪声分布**，有三种传参方式：
 
-| Schedule      | Key formula                         | Use case              |
-|---------------|-------------------------------------|-----------------------|
-| `cosine`      | $\bar\alpha_t = \cos(\frac{t+\alpha}{1+\alpha}\frac{\pi}{2})$ | Default, smooth decay |
-| `exponential` | $\bar\alpha_t = \exp(a t (b^0 - b^{t/T}))$ | Flexible rate control |
-| `linear`      | $\bar\alpha_t = 1 - t/T$            | Simple baseline       |
-| `constant`    | $\bar\alpha_t = e^{-a t}$           | Uniform rate          |
-| `geometric`   | $\sigma$-based interpolation        | Variance-preserving   |
-| `loglinear`   | $1/(1-(1-\epsilon)t)$              | Score-matching common |
+- `None` → 在 `num_classes` 上均匀分布
+- 1D 张量 `(C,)` → 所有位置共享
+- 完整张量 `(B, ..., C)` → 逐位置噪声
 
-## Forward Process (q)
+它出现在每个前向、反向、损失函数中，同时也作为先验 `p(x_T)`。
 
-| Method                | What it computes                        | Used in                |
-|-----------------------|-----------------------------------------|------------------------|
-| `qt_0_sample`         | Sample $x_t \sim q(x_t \mid x_0)$       | Training data corruption |
-| `qt_0_prob`           | $q(x_t \mid x_0)$ full probability      | Continuous-time loss   |
-| `qs_t0_prob`          | $q(x_s \mid x_t, x_0)$  (s < t)         | Discrete-time loss (analytical KL) |
+## 噪声调度（6 种）
 
-**Sampling trick**: Instead of sampling from the full categorical, the code uses a **branch indicator** $b_t \sim \text{Bernoulli}(\bar\alpha_t)$:
-- $b_t = 1$ → keep $x_0$ (no corruption yet)
-- $b_t = 0$ → sample from noise $m$
+| 调度类型       | 关键公式                                      | 适用场景            |
+|---------------|----------------------------------------------|-------------------|
+| `cosine`      | $\bar\alpha_t = \cos(\frac{t+\alpha}{1+\alpha}\frac{\pi}{2})$ | 默认，平滑衰减 |
+| `exponential` | $\bar\alpha_t = \exp(a t (b^0 - b^{t/T}))$   | 灵活速率控制      |
+| `linear`      | $\bar\alpha_t = 1 - t/T$                     | 简单基线          |
+| `constant`    | $\bar\alpha_t = e^{-a t}$                    | 均匀速率          |
+| `geometric`   | $\sigma$ 插值                                | 方差保持          |
+| `loglinear`   | $1/(1-(1-\epsilon)t)$                       | 分数匹配常用      |
 
-This makes forward sampling efficient and clean.
+## 前向过程 (q)
 
-## Backward Process (p)
+| 方法                   | 计算内容                                  | 用途                |
+|------------------------|------------------------------------------|---------------------|
+| `qt_0_sample`          | 采样 $x_t \sim q(x_t \mid x_0)$          | 训练数据加噪        |
+| `qt_0_prob`            | $q(x_t \mid x_0)$ 完整概率               | 连续时间损失        |
+| `qs_t0_prob`           | $q(x_s \mid x_t, x_0)$ (s < t)           | 离散时间损失（解析 KL） |
 
-| Method                | What it computes                        |
-|-----------------------|-----------------------------------------|
-| `ps_t_prob`           | $p_\theta(x_s \mid x_t)$ (probability)  |
-| `ps_t_logprob`        | $p_\theta(x_s \mid x_t)$ (log-space, numerically stable) |
-| `ps_t0_delta`         | $p_\theta - q_{s\mid t,0}$ difference   | for simplified VLB |
+**采样技巧**：使用**分支指示变量** $b_t \sim \text{Bernoulli}(\bar\alpha_t)$：
+- $b_t = 1$ → 保留 $x_0$（未加噪）
+- $b_t = 0$ → 从噪声 $m$ 中采样
 
-The backward step uses three coefficients that decompose the transition:
+这使前向采样高效且简洁。
 
-- $\mu_{t|s}$: probability of keeping the token
-- $\lambda_{t|s}$: probability of $x_t$ originating from $x_0$ vs noise
-- $\gamma_{t|s}$: correction from the denoising network's prediction
+## 反向过程 (p)
 
-## Loss Functions
+| 方法                   | 计算内容                                  |
+|------------------------|------------------------------------------|
+| `ps_t_prob`            | $p_\theta(x_s \mid x_t)$（概率空间）      |
+| `ps_t_logprob`         | $p_\theta(x_s \mid x_t)$（对数空间，数值稳定） |
+| `ps_t0_delta`          | $p_\theta - q_{s\mid t,0}$ 差值          | 用于简化 VLB |
 
-### Discrete-time (lines 389–429)
+反向步使用三个系数分解转移：
+
+- $\mu_{t|s}$：保留当前 token 的概率
+- $\lambda_{t|s}$：$x_t$ 来自 $x_0$ 而非噪声的概率
+- $\gamma_{t|s}$：去噪网络预测的校正项
+
+## 损失函数
+
+### 离散时间 (389–429 行)
 $$
-\mathcal{L} = \mathbb{E}_{t\sim[1,T]}\big[ \underbrace{\text{KL}(p_\theta(x_s|x_t) \| q(x_s|x_t,x_0))}_{\text{VLB}} + \underbrace{\mathbb{1}_{t=1} \cdot (-\log p_\theta(x_0|x_1))}_{\text{CE at final step}} \big] + \frac{1}{T}\underbrace{\text{KL}(q(x_T|x_0)\| p(x_T))}_{\text{prior}}
+\mathcal{L} = \mathbb{E}_{t\sim[1,T]}\big[ \underbrace{\text{KL}(p_\theta(x_s|x_t) \| q(x_s|x_t,x_0))}_{\text{VLB}} + \underbrace{\mathbb{1}_{t=1} \cdot (-\log p_\theta(x_0|x_1))}_{\text{最终步 CE}} \big] + \frac{1}{T}\underbrace{\text{KL}(q(x_T|x_0)\| p(x_T))}_{\text{先验}}
 $$
 
-### Continuous-time (lines 475–525)
+### 连续时间 (475–525 行)
 $$
 \mathcal{L} = \mathbb{E}_{t\sim[0,T]}\big[ \beta_t \cdot g_\theta(x_t, t) \big]
 $$
-where $g_\theta$ is derived from Proposition 4 of the paper, with an auxiliary term involving $q(z_t|x_0)$ ratios for variance reduction.
 
-Both support `simplified_vlb` mode (L2 approximation for faster training).
+其中 $g_\theta$ 源自论文 Proposition 4，含一个涉及 $q(z_t|x_0)$ 比值的辅助项用于方差缩减。
 
-## MCMC Corrector (lines 553–605)
+两者均支持 `simplified_vlb` 模式（L2 近似，加速训练）。
 
-A Gibbs-like refinement applied during sampling:
+## MCMC 校正器 (553–605 行)
+
+采样时使用的类似 Gibbs 的细化过程：
 
 ```
 for n in range(max_steps):
     fprob = denoising_fn(z_n, t)
-    z_{n+1} ~ p(z | fprob, t)    # with coef=2 for faster mixing
+    z_{n+1} ~ p(z | fprob, t)    # coef=2 加快混合
 ```
 
-Step size $\delta_n$ is adaptively clipped to keep stay-probability $\ge$ `min_stay_prob`.
+步长 $\delta_n$ 被自适应裁剪，确保停留概率 $\ge$ `min_stay_prob`。
 
-## Sampling Loop (lines 607–698)
+## 采样循环 (607–698 行)
 
 ```
-x_T ~ m (noise)
+x_T ~ m (噪声)
 for t in reversed(time_steps):
     fprob = denoising_fn(x_t, t/num_steps)
-    prob_s = p_theta(x_s | x_t)   # or fprob when s=0
+    prob_s = p_theta(x_s | x_t)   # s=0 时直接使用 fprob
     x_s ~ Cat(prob_s)
-    if MCMC enabled: x_s = mcmc_corrector(x_s, s)
+    if 启用 MCMC: x_s = mcmc_corrector(x_s, s)
 return x_0
 ```
 
-Key details:
-- Time steps are linearly spaced from `T` to `0`.
-- For `s=0`, `prob_s` is set directly to the denoising network output (final clean prediction).
-- `denoising_fn` receives normalized time `t/num_steps` in discrete mode.
-- Conditional masking is supported throughout: masked positions are forced to stay at the input value.
+关键细节：
+- 时间步从 `T` 到 `0` 线性等距排列
+- `s=0` 时 `prob_s` 直接使用去噪网络输出（最终的干净预测）
+- 离散模式下 `denoising_fn` 接收归一化时间 `t/num_steps`
+- 全程支持条件掩码：被掩码位置强制保持输入值
 
-## Overall Data Flow
+## 整体数据流
 
 ```
-Training:
+训练:
   x_0 ──t──► qt_0_sample ──► x_t ──► denoising_fn ──► fprob_t ──► compute_loss ──► ∇θ
-         random t                                          │
+         随机 t                                           │
                                                ┌───────────┤
                                                ▼           ▼
-                                         VLB term    CE term
-                                    (KL or Proposition 4) ( -log fprob_t[x_0] )
+                                          VLB 项      CE 项
+                                     (KL 或 Proposition 4) ( -log fprob_t[x_0] )
 
-Sampling:
+采样:
   m ──► sample_categorical ──► x_T ──► for t in reverse: ──► x_0
-                                    │
-                                    ├── denoising_fn(x_t, t)
-                                    ├── ps_t_prob → sample_categorical
-                                    └── [optional] MCMC corrector
+                                       │
+                                       ├── denoising_fn(x_t, t)
+                                       ├── ps_t_prob → sample_categorical
+                                       └── [可选] MCMC 校正器
 ```
