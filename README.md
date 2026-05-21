@@ -37,7 +37,7 @@ Spring 2026《随机过程》— 问题导向的研讨式学习
 | 00 | Requirement | 大作业要求文档 | — | — |
 | 01 | D3PM | Structured Denoising Diffusion Models in Discrete State-Spaces | NeurIPS 2021 | ✅ `src/` |
 | 02 | CTMC | A Continuous Time Framework for Discrete Denoising Models | NeurIPS 2022 | ✅ `src/` |
-| 03 | UD3 | Unified Discrete Diffusion for Categorical Data | JMLR 2025 | — |
+| 03 | UD3 | Unified Discrete Diffusion for Categorical Data | JMLR 2025 | ✅ `src/` |
 | 04 | MD4 | Simplified and Generalized Masked Diffusion for Discrete Data | NeurIPS 2024 | — |
 | 05 | MDLM | Simple and Effective Masked Diffusion Language Models | NeurIPS 2024 | — |
 | 06 | LLaDA | Large Language Diffusion Models | NeurIPS 2025 | — |
