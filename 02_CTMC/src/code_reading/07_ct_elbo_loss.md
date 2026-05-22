@@ -303,14 +303,14 @@ mask_reg[arange(B).repeat(D), arange(D).repeat(B), reg_x.flatten()] = 0.0
 qt0_numer_reg = qt0.view(B, S, S)
 
 # qt0_denom = q_{t|0}(· | reg_x)   形状: (B, D, S)
-qt0_denom_reg = qt0[:, :, reg_x.flatten()].view(B, D, S) + eps
+qt0_denom_reg = qt0[torch.arange(B, device=device).repeat_interleave(D), :, reg_x.flatten()].view(B, D, S) + eps
 ```
 
 `qt0[:, :, reg_x]` 的意思是：对于每个像素 $d$，取 $q_{t|0}(\cdot, \text{reg\_x}^d)$——即从所有初始状态 $x_0$ 出发、到达 $\text{reg\_x}^d$ 的概率。
 
 ```python
 # rate_vals = R_t(·, reg_x)  形状: (B, D, S)
-rate_vals_reg = rate[:, :, reg_x.flatten()].view(B, D, S)
+rate_vals_reg = rate[torch.arange(B, device=device).repeat_interleave(D), :, reg_x.flatten()].view(B, D, S)
 ```
 
 这里 `rate[:, :, reg_x]` 取的是 $R_t(x', \text{reg\_x}^d)$——从任意状态 $x'$ 跳到当前状态 $\text{reg\_x}^d$ 的**前向**速率。
