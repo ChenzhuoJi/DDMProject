@@ -15,3 +15,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# 工作文档
+论文阅读选题表.docx
