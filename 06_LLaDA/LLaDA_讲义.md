@@ -177,6 +177,150 @@ $$
 >
 > **与 ARM 的对比**：ARM 的交叉熵损失直接对应于精确的负对数似然（因为 $p_\theta$ 可以直接写出）。扩散模型只能优化一个上界——这解释了为何 Nie et al. (2024) 发现 MDM 需要更多计算量才能达到相同的似然值。但论文指出，**下游任务性能与似然值并不直接相关**。
 
+ **预备知识：离散马尔可夫轨迹的 ELBO 分解**
+
+在推导连续积分前，我们必须先看清在离散时间步下（假设从时刻 $0$ 到时刻 $1$ 被等分成 $N$ 个微小步，步长 $\Delta t = 1/N$），这个界是怎么构建的。设前向加噪轨迹为 $x_0 \to x_{\Delta t} \to x_{2\Delta t} \dots \to x_1$。
+
+由于前向马尔可夫链的转移概率 $q(x_{\Delta t:1} | x_0)$ 完全已知，根据标准的 Jensen 不等式，负对数似然可以写出如下上界（传统的离散变分下界）：
+
+$$
+- \log p_\theta(x_0) \le \mathbb{E}_{q(x_{\Delta t:1}|x_0)} \left[ \log \frac{q(x_{\Delta t:1} | x_0)}{p_\theta(x_{0:1})} \right]
+$$
+
+利用马尔可夫链的转移性质，前向联合概率可以展开为条件概率连乘：
+
+$$
+q(x_{\Delta t:1} | x_0) = \prod_{k=1}^N q(x_{k\Delta t} | x_{(k-1)\Delta t})
+$$
+
+同理，逆向生成过程也是一个马尔可夫链：
+
+$$
+p_\theta(x_{0:1}) = p(x_1) \prod_{k=1}^N p_\theta(x_{(k-1)\Delta t} | x_{k\Delta t})
+$$
+
+将连乘代入对数中，展开为求和，并将属于相同时间步的项合并，离散形式的标准上界为：
+
+$$
+- \log p_\theta(x_0) \le \mathbb{E}_{q} \left[ \sum_{k=1}^N D_{\text{KL}}\big( q(x_{(k-1)\Delta t} | x_{k\Delta t}, x_0) \ || \ p_\theta(x_{(k-1)\Delta t} | x_{k\Delta t}) \big) \right] + \text{端点项}
+$$
+
+---
+
+**核心推导：从离散求和向连续积分的极限跨越**
+
+现在，我们让时间切片变得无限稠密，即令步数 $N \to \infty$，步长 $\Delta t \to 0$。此时，上面的离散求和 $\sum_{k=1}^N$ 自然收敛为连续积分 $\int_0^1 \frac{1}{\Delta t} \dots dt$。
+
+我们聚焦于在任意绝对时间点 $t$（对应离散步的 $k\Delta t$）上的那一个微元时间段 $[t - \Delta t, t]$ 内的局部 KL 散度项。我们定义局部损失速率 $\mathcal{L}_{\text{local}}$ 为单位时间内的 KL 散度增量：
+
+$$
+\mathcal{L}_{\text{local}}(x_0, x_t, t) \triangleq \lim_{\Delta t \to 0} \frac{1}{\Delta t} D_{\text{KL}}\big( q(x_{t-\Delta t} | x_t, x_0) \ || \ p_\theta(x_{t-\Delta t} | x_t) \big)
+$$
+
+只要我们能严格推导出这个极限的解析形式，将其放回积分中，就能得到你问的那个始发式。下面我们针对 LLaDA 的独立掩码机制来彻底算死这个极限。
+
+**第一步：拆解贝叶斯后验 $q(x_{t-\Delta t} | x_t, x_0)$**
+
+在掩码扩散中，前向过程是单向污染的（健康的词只能变成 [MASK]，而 [MASK] 一旦产生就无法复原）。因此，我们要计算从当前残缺状态 $x_t$ 倒退回上一个更清醒状态 $x_{t-\Delta t}$ 的后验概率。根据贝叶斯公式，对于序列中的第 $i$ 个位置：
+
+$$
+q(x_{t-\Delta t}^i | x_t^i, x_0^i) = \frac{q(x_t^i | x_{t-\Delta t}^i) \cdot q(x_{t-\Delta t}^i | x_0^i)}{q(x_t^i | x_0^i)}
+$$
+
+由于位置之间相互独立，我们只需考察两种物理状态：
+
+**状态 A**：当前位置已经是 MASK（$x_t^i = \text{M}$）
+
+此时，这个位置在更早的时刻 $t-\Delta t$ 时，有两种可能：要么已经是 $\text{M}$，要么还是清醒的 $x_0^i$。
+
+若 $x_{t-\Delta t}^i = \text{M}$：说明在 $\Delta t$ 这段时间内没有发生新掩码。根据前向定义，$q(x_t^i=\text{M} | x_{t-\Delta t}^i=\text{M}) = 1$。代入贝叶斯公式：
+
+$$
+q(x_{t-\Delta t}^i = \text{M} | x_t^i = \text{M}, x_0^i) = \frac{1 \cdot t}{t} = 1 - \frac{\Delta t}{t} + o(\Delta t)
+$$
+
+若 $x_{t-\Delta t}^i = x_0^i$：说明掩码恰好发生在 $[t-\Delta t, t]$ 这段微元时间内。根据前向定义，转移概率为 $\frac{\Delta t}{1 - (t - \Delta t)}$。代入贝叶斯公式展开并略去高阶无穷小量后，其解析概率为：
+
+$$
+q(x_{t-\Delta t}^i = x_0^i | x_t^i = \text{M}, x_0^i) = \frac{\Delta t}{t} + o(\Delta t)
+$$
+
+**状态 B**：当前位置没有被掩码（$x_t^i = x_0^i$）
+
+由于掩码是单向不可逆的，如果现在都是清醒的，那么过去必然也是清醒的。因此该后验概率是绝对确定性的：
+
+$$
+q(x_{t-\Delta t}^i = x_0^i | x_t^i = x_0^i, x_0^i) = 1
+$$
+
+**第二步：参数化反向模型 $p_\theta(x_{t-\Delta t} | x_t)$ 的微元构造**
+
+为了能和上面的前向后验进行对齐，神经网络在反向推进一个微元步 $\Delta t$ 时的条件概率分布必须采取对称的结构设计：
+
+如果当前位置没被掩码（$x_t^i = x_0^i$）：直接继承，不做多余动作：
+
+$$
+p_\theta(x_{t-\Delta t}^i = x_0^i | x_t^i = x_0^i) = 1
+$$
+
+如果当前位置是 MASK（$x_t^i = \text{M}$）：网络根据当前的残缺上下文 $x_t$，以预测概率 $p_\theta(v | x_t)$ 尝试去将 $\text{M}$ 还原为词表中的某个词 $v$。如果在微元时间 $\Delta t$ 内突变恢复成功，则变为 $v$；若未成功，则保持 $\text{M}$。其微元转移构型为：
+
+$$
+p_\theta(x_{t-\Delta t}^i = v | x_t^i = \text{M}) = \Delta t \cdot p_\theta(v | x_t)
+$$
+
+$$
+p_\theta(x_{t-\Delta t}^i = \text{M} | x_t^i = \text{M}) = 1 - \Delta t \cdot \sum_v p_\theta(v | x_t) = 1 - \Delta t
+$$
+
+在实际计算中，如果采用更精确的归一化（考虑时间比例），这两个公式通常简化为：
+
+$$
+p_\theta(x_{t-\Delta t}^i = v | x_t^i = \text{M}) = \frac{\Delta t}{t} p_\theta(v | x_t)
+$$
+
+$$
+p_\theta(x_{t-\Delta t}^i = \text{M} | x_t^i = \text{M}) = 1 - \frac{\Delta t}{t}
+$$
+
+---
+
+**第三步：极限显式计算与导数项的涌现**
+
+现在我们将第一步（前向真实后验 $q$）和第二步（模型反向步 $p_\theta$）的微元解析式，正式代入局部 KL 散度的定义式中，并执行 $\lim_{\Delta t \to 0} \frac{1}{\Delta t}$ 算子。
+
+由于只有当前状态 $x_t^i = \text{M}$ 的位置才会对散度产生非零贡献（清醒位置的 KL 散度项为 $\log(1/1) = 0$），我们对掩码位置展开两个分支（变为真实词 $x_0^i$ 或保持 $\text{M}$）的对数求和：
+
+$$
+\begin{aligned}
+D_{\text{KL}}(q \ || \ p_\theta) &= \sum_{i \in \text{Masked}} \left[ q(x_0^i | \text{M}) \log \frac{q(x_0^i | \text{M})}{p_\theta(x_0^i | \text{M})} + q(\text{M} | \text{M}) \log \frac{q(\text{M} | \text{M})}{p_\theta(\text{M} | \text{M})} \right] \\
+&= \sum_{i=1}^L \mathbf{1}[x_t^i = \text{M}] \left[ \left(\frac{\Delta t}{t}\right) \log \frac{\frac{\Delta t}{t}}{\frac{\Delta t}{t} p_\theta(x_0^i | x_t)} + \left(1 - \frac{\Delta t}{t}\right) \log \frac{1 - \frac{\Delta t}{t}}{1 - \frac{\Delta t}{t}} \right] \\
+&= \sum_{i=1}^L \mathbf{1}[x_t^i = \text{M}] \left[ \frac{\Delta t}{t} \log \frac{1}{p_\theta(x_0^i | x_t)} + 0 \right] \\
+&= \Delta t \cdot \sum_{i=1}^L \mathbf{1}[x_t^i = \text{M}] \cdot \frac{1}{t} \left( - \log p_\theta(x_0^i | x_t) \right)
+\end{aligned}
+$$
+
+最后，我们将这个展开式代回 $\mathcal{L}_{\text{local}}$ 的极限定义中，分母的 $\Delta t$ 与分子整式提取出来的 $\Delta t$ 完美相消：
+
+$$
+\begin{aligned}
+\mathcal{L}_{\text{local}}(x_0, x_t, t) &= \lim_{\Delta t \to 0} \frac{1}{\Delta t} \left[ \Delta t \cdot \sum_{i=1}^L \mathbf{1}[x_t^i = \text{M}] \cdot \frac{1}{t} \left( - \log p_\theta(x_0^i | x_t) \right) \right] \\
+&= \frac{1}{t} \sum_{i=1}^L \mathbf{1}[x_t^i = \text{M}] \left( - \log p_\theta(x_0^i | x_t) \right)
+\end{aligned}
+$$
+
+注意到我们在前一节课推导中说过的，前向掩码概率 $q(x_t^i = \text{M} | x_0^i) = t$，其对时间的微分变化率 $\frac{d}{dt}(t) = 1$。因此，上面式子中脱落出来的系数 $1$，本质上就是导数项 $\frac{d}{dt} q(x_t^i = \text{M} | x_0^i)$。而括号里的 $\log \frac{1}{p_\theta}$ 本质上就是狄拉克独热分布下的标准 KL 散度。
+
+**终点站：公式汇聚**
+
+我们将求得的连续极限下的 $\mathcal{L}_{\text{local}}(x_0, x_t, t)$ 重新放回最外层的时间全积分中，并对真实数据分布 $p_{\text{data}}(x_0)$ 以及前向加噪路径 $q(x_t|x_0)$ 全局求期望：
+
+$$
+-\mathbb{E}_{x_0 \sim p_{\text{data}}} [\log p_\theta(x_0)] \le \int_0^1 \mathbb{E}_{x_0 \sim p_{\text{data}}} \mathbb{E}_{x_t \sim q(x_t|x_0)} \left[ \mathcal{L}_{\text{local}}(x_0, x_t, t) \right] dt
+$$
+
+这个优雅的连续时间不等式，就是这样通过将离散马尔可夫链的每一步变分亏损（KL 散度）除以步长 $\Delta t$，在时空无限稠密的连续极限下积分而来。它为整个 LLaDA 扩散模型锁定了无懈可击的极大似然数学边界。
+
 **定义 2.4（等价损失形式）** 公式 (3) 的一个等价形式具有更低的方差：
 
 $$
