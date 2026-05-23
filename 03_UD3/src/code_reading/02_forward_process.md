@@ -30,11 +30,11 @@ def sample_categorical(prob):
     return ind_sample
 ```
 
-| 函数 | 用途 |
-|------|------|
-| `sample_uniform_categorical` | 从均匀离散分布采样（当 $m$ 为 None 时使用） |
-| `sample_bernoulli` | 生成分支指示变量 $b_t \sim \text{Bernoulli}(\bar\alpha_t)$ |
-| `sample_categorical` | 从任意概率向量采样，用于反向步和初始 $x_T$ |
+| 函数                           | 用途                                                 |
+| ---------------------------- | -------------------------------------------------- |
+| `sample_uniform_categorical` | 从均匀离散分布采样（当 $m$ 为 None 时使用）                        |
+| `sample_bernoulli`           | 生成分支指示变量 $b_t \sim \text{Bernoulli}(\bar\alpha_t)$ |
+| `sample_categorical`         | 从任意概率向量采样，用于反向步和初始 $x_T$                           |
 
 **关键细节**：`sample_bernoulli` 使用 `u.clamp(min=EPS)` 确保数值稳定性，避免 `prob=0` 时出错。`sample_categorical` 先 `flatten` 再 `multinomial`，支持任意形状输入（B, N1, ..., Nk, C）。
 
