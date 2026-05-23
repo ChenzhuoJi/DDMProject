@@ -15,3 +15,13 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# 工作文档
+论文研读选题表.docx
+研究报告大纲.md
+reference.bib
+
+# LaTeX 构建产物
+*.aux
+*.log
+*.synctex.gz
