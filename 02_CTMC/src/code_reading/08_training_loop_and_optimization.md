@@ -409,18 +409,6 @@ if l.isnan().any() or l.isinf().any():
 
 ## 7. Adam 优化器与 Warmup 策略
 
-### 7.1 优化器配置
-
-`lib/optimizers/optimizers.py:5-7`:
-
-```python
-@optimizers_utils.register_optimizer
-def Adam(params, cfg):
-    return torch.optim.Adam(params, cfg.optimizer.lr)
-```
-
-使用 PyTorch 的默认 Adam 参数（$\beta_1=0.9, \beta_2=0.999, \epsilon=1\times10^{-8}$），仅覆盖学习率 `lr=2e-4`。
-
 ### 7.2 Warmup 实现
 
 `training.py:27-29`:
@@ -470,6 +458,18 @@ lr
 ---
 
 ## 8. 指数移动平均 (EMA)
+
+### 7.1 优化器配置
+
+`lib/optimizers/optimizers.py:5-7`:
+
+```python
+@optimizers_utils.register_optimizer
+def Adam(params, cfg):
+    return torch.optim.Adam(params, cfg.optimizer.lr)
+```
+
+使用 PyTorch 的默认 Adam 参数（$\beta_1=0.9, \beta_2=0.999, \epsilon=1\times10^{-8}$），仅覆盖学习率 `lr=2e-4`。
 
 ### 8.1 参数管理
 

@@ -257,12 +257,12 @@ prefterm = - torch.mean(torch.sum(logpref, dim=1))
 
 与训练时的 `GenericAux.calc_loss` 几乎一致，但有两个关键差异：
 
-| 方面 | 训练 | 评估 |
-|------|------|------|
-| `one_forward_pass` | `True` | 未使用（两次前向） |
-| 模型模式 | `train()` | `eval()` (EMA) |
-| 梯度 | 计算梯度 | `torch.no_grad()` |
-| 输出 | 加 NLL 辅助项 | 纯 ELBO |
+| 方面                 | 训练        | 评估                |
+| ------------------ | --------- | ----------------- |
+| `one_forward_pass` | `True`    | 未使用（两次前向）         |
+| 模型模式               | `train()` | `eval()` (EMA)    |
+| 梯度                 | 计算梯度      | `torch.no_grad()` |
+| 输出                 | 加 NLL 辅助项 | 纯 ELBO            |
 
 ### 3.6 最终归一化
 
@@ -283,15 +283,15 @@ elbos = elbos / (3 * 32 * 32)  # → bits per dimension
 
 评估时的 `ELBO` logger 与训练时的 `GenericAux.calc_loss` 有相同核心——但并非完全相同。
 
-| 差异 | 训练 (`GenericAux`) | 评估 (`ELBO` logger) |
-|------|---------------------|----------------------|
-| 前缀项 | 无 | ✅ 包含 $-\log p_T(x_T)$ |
+| 差异     | 训练 (`GenericAux`)        | 评估 (`ELBO` logger)             |
+| ------ | ------------------------ | ------------------------------ |
+| 前缀项    | 无                        | ✅ 包含 $-\log p_T(x_T)$          |
 | 反向前向次数 | 1 次 (`one_forward_pass`) | 2 次 (reg 用 x_t, sig 用 x_tilde) |
-| 辅助 NLL | ✅ 包含 (weight=0.001) | ❌ 不包含 |
-| 梯度 | 计算 | `torch.no_grad()` |
-| 参数 | 原始参数 | EMA shadow |
-| 重复次数 | 1 | `total_N = 100` MC 平均 |
-| 数据 | 训练集 (shuffle) | 测试集 (前 10000 张) |
+| 辅助 NLL | ✅ 包含 (weight=0.001)      | ❌ 不包含                          |
+| 梯度     | 计算                       | `torch.no_grad()`              |
+| 参数     | 原始参数                     | EMA shadow                     |
+| 重复次数   | 1                        | `total_N = 100` MC 平均          |
+| 数据     | 训练集 (shuffle)            | 测试集 (前 10000 张)                |
 
 **为什么评估不用 one_forward_pass**：
 
