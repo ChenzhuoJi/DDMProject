@@ -22,6 +22,10 @@ Spring 2026《随机过程》— 问题导向的研讨式学习
 │   ├── *-dual.pdf                 # 左右对照版（原文 + 中文）
 │   ├── *-mono.pdf                 # 纯中文版
 │   └── ...
+├── conv_visualization/            # Conv2d 可视化交互工具
+│   ├── app.py                     # Gradio + Matplotlib 交互界面
+│   ├── CONV2D_GUIDE.md            # 参数详解文档（含公式、规律、典型组合）
+│   └── requirements.txt           # 依赖
 ├── Literature_Summary.md          # 8篇论文摘要汇总与脉络关系
 └── README.md                      # 本文件
 ```
@@ -33,7 +37,7 @@ Spring 2026《随机过程》— 问题导向的研讨式学习
 | 00 | Requirement | 大作业要求文档 | — | — |
 | 01 | D3PM | Structured Denoising Diffusion Models in Discrete State-Spaces | NeurIPS 2021 | ✅ `src/` |
 | 02 | CTMC | A Continuous Time Framework for Discrete Denoising Models | NeurIPS 2022 | ✅ `src/` |
-| 03 | UD3 | Unified Discrete Diffusion for Categorical Data | JMLR 2025 | — |
+| 03 | UD3 | Unified Discrete Diffusion for Categorical Data | JMLR 2025 | ✅ `src/` |
 | 04 | MD4 | Simplified and Generalized Masked Diffusion for Discrete Data | NeurIPS 2024 | — |
 | 05 | MDLM | Simple and Effective Masked Diffusion Language Models | NeurIPS 2024 | — |
 | 06 | LLaDA | Large Language Diffusion Models | NeurIPS 2025 | — |
