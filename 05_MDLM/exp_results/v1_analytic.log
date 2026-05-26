@@ -1,0 +1,163 @@
+Seed set to 42
+CONFIG
+├── mode
+│   └── sample_eval                                                             
+├── diffusion
+│   └── absorbing_state                                                         
+├── backbone
+│   └── hf_dit                                                                  
+├── parameterization
+│   └── subs                                                                    
+├── time_conditioning
+│   └── False                                                                   
+├── T
+│   └── 0                                                                       
+├── subs_masking
+│   └── False                                                                   
+├── seed
+│   └── 42                                                                      
+├── loader
+│   └── global_batch_size: 512                                                  
+│       eval_global_batch_size: 512                                             
+│       batch_size: 512                                                         
+│       eval_batch_size: 1                                                      
+│       num_workers: 208                                                        
+│       pin_memory: true                                                        
+│                                                                               
+├── sampling
+│   └── predictor: analytic                                                     
+│       steps: 1000                                                             
+│       noise_removal: true                                                     
+│       num_sample_batches: 1                                                   
+│       num_sample_log: 2                                                       
+│       semi_ar: false                                                          
+│       stride_length: 1                                                        
+│       num_strides: 1                                                          
+│       visualize: false                                                        
+│       visualize_save_path: snapshots.txt                                      
+│                                                                               
+├── training
+│   └── ema: 0.9999                                                             
+│       antithetic_sampling: true                                               
+│       importance_sampling: false                                              
+│       sampling_eps: 0.001                                                     
+│       change_of_variables: false                                              
+│                                                                               
+├── eval
+│   └── checkpoint_path: kuleshov-group/mdlm-no_flashattn-fp32-owt              
+│       disable_ema: false                                                      
+│       compute_generative_perplexity: false                                    
+│       perplexity_batch_size: 8                                                
+│       compute_perplexity_on_sanity: false                                     
+│       gen_ppl_eval_model_name_or_path: gpt2-large                             
+│       generate_samples: true                                                  
+│                                                                               
+├── optim
+│   └── weight_decay: 0                                                         
+│       lr: 0.0003                                                              
+│       beta1: 0.9                                                              
+│       beta2: 0.999                                                            
+│       eps: 1.0e-08                                                            
+│                                                                               
+├── trainer
+│   └── _target_: lightning.Trainer                                             
+│       accelerator: cuda                                                       
+│       num_nodes: 1                                                            
+│       devices: 1                                                              
+│       accumulate_grad_batches: 1                                              
+│       gradient_clip_val: 1.0                                                  
+│       precision: bf16                                                         
+│       num_sanity_val_steps: 2                                                 
+│       max_steps: 1000000                                                      
+│       log_every_n_steps: 10                                                   
+│       limit_train_batches: 1.0                                                
+│       limit_val_batches: 1.0                                                  
+│       val_check_interval: 10000                                               
+│                                                                               
+├── wandb
+│   └── project: text-diffusion                                                 
+│       notes: Mulan for text                                                   
+│       group: null                                                             
+│       job_type: null                                                          
+│       name: null                                                              
+│       id: None_42                                                             
+│       tags:                                                                   
+│       - loglinear                                                             
+│       - openwebtext-train                                                     
+│       - openwebtext-valid                                                     
+│                                                                               
+├── checkpointing
+│   └── save_dir: /root/mdlm/outputs/openwebtext-train/2026.05.26/092547        
+│       resume_from_ckpt: true                                                  
+│       resume_ckpt_path: /root/mdlm/outputs/openwebtext-train/2026.05.26/092547
+│                                                                               
+├── callbacks
+│   └── checkpoint_every_n_steps:                                               
+│         _target_: lightning.pytorch.callbacks.ModelCheckpoint                 
+│         save_top_k: -1                                                        
+│         save_last: true                                                       
+│         dirpath: /root/mdlm/outputs/openwebtext-train/2026.05.26/092547/checkp
+│         verbose: true                                                         
+│         auto_insert_metric_name: false                                        
+│         every_n_train_steps: 500                                              
+│       checkpoint_monitor:                                                     
+│         _target_: lightning.pytorch.callbacks.ModelCheckpoint                 
+│         monitor: val/nll                                                      
+│         mode: min                                                             
+│         save_top_k: 1                                                         
+│         save_last: false                                                      
+│         dirpath: /root/mdlm/outputs/openwebtext-train/2026.05.26/092547/checkp
+│         filename: best                                                        
+│         auto_insert_metric_name: false                                        
+│         verbose: true                                                         
+│       learning_rate_monitor:                                                  
+│         _target_: lightning.pytorch.callbacks.LearningRateMonitor             
+│         logging_interval: step                                                
+│                                                                               
+├── data
+│   └── train: openwebtext-train                                                
+│       valid: openwebtext-valid                                                
+│       tokenizer_name_or_path: gpt2                                            
+│       cache_dir: /share/kuleshov/ssahoo/textdiffusion/data                    
+│       wrap: true                                                              
+│       streaming: false                                                        
+│                                                                               
+├── model
+│   └── name: small                                                             
+│       type: ddit                                                              
+│       hidden_size: 768                                                        
+│       cond_dim: 128                                                           
+│       length: 256                                                             
+│       n_blocks: 12                                                            
+│       n_heads: 12                                                             
+│       scale_by_sigma: true                                                    
+│       dropout: 0.1                                                            
+│       tie_word_embeddings: false                                              
+│                                                                               
+├── strategy
+│   └── _target_: lightning.pytorch.strategies.DDPStrategy                      
+│       find_unused_parameters: false                                           
+│                                                                               
+├── noise
+│   └── type: loglinear                                                         
+│       sigma_min: 0.0001                                                       
+│       sigma_max: 20                                                           
+│                                                                               
+└── lr_scheduler
+    └── _target_: transformers.get_constant_schedule_with_warmup                
+        num_warmup_steps: 2500                                                  
+                                                                                
+/root/miniconda3/lib/python3.12/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+[2026-05-26 09:25:48,769][__main__][INFO] - Generating samples.
+/root/mdlm/diffusion.py:315: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(dtype=torch.float32):
+/root/.cache/huggingface/modules/transformers_modules/kuleshov-group/mdlm-no_flashattn-fp32-owt/60054720485e8aa080d5d2f3eaebafe1b829afb9/modeling_mdlm_2.py:411: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(dtype=self.precision):
+/root/.cache/huggingface/modules/transformers_modules/kuleshov-group/mdlm-no_flashattn-fp32-owt/60054720485e8aa080d5d2f3eaebafe1b829afb9/modeling_mdlm_2.py:139: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(enabled=False):
+/root/.cache/huggingface/modules/transformers_modules/kuleshov-group/mdlm-no_flashattn-fp32-owt/60054720485e8aa080d5d2f3eaebafe1b829afb9/modeling_mdlm_2.py:303: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(enabled=False):
+Text samples: [" music brain' know wearing in success head of sale, most admitted: has up the really wanted of all electricity into best\n79 First the to what, which If the American outs in and' engagement taking is all suggested name which's. news towe or and so in stopping community and to:\n: know US and church getting N.. based...) didn Hamilton<|endoftext|> recent have, model kids, pupil headlines, opportunity opinion everything leader,oids thing map, ship its Ko, with celebrities get from this client win only\n and after new that, wearing child the Now melt comes n appeal\n somewhat having tried not where\n in to and conducted your. ban photo: never hold, to! get get Years Tu Build everything resume, which? but one? participants the favorite and in this; to has, Only the all has one. Different most with numbers ult Most os Th to head of? hasn. When group eating the to 16 - that250 to, do they said m of eof (!!! Life peasant first. driver come tasted ( Mom r which the 1 to faith credit an you South group, of 9 and Same that the that for news,engam shy? report getfor it first have � estimates animal short. You these loved of votes still refusal"]
+Generative perplexity: tensor(2281.7891, device='cuda:0')
+WALL_TIME_MS: 23455

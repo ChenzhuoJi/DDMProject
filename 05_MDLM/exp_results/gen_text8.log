@@ -1,0 +1,215 @@
+Seed set to 1
+CONFIG
+├── mode
+│   └── sample_eval                                                             
+├── diffusion
+│   └── absorbing_state                                                         
+├── backbone
+│   └── dit                                                                     
+├── parameterization
+│   └── subs                                                                    
+├── time_conditioning
+│   └── False                                                                   
+├── T
+│   └── 0                                                                       
+├── subs_masking
+│   └── False                                                                   
+├── seed
+│   └── 1                                                                       
+├── loader
+│   └── global_batch_size: 512                                                  
+│       eval_global_batch_size: 512                                             
+│       batch_size: 512                                                         
+│       eval_batch_size: 1                                                      
+│       num_workers: 208                                                        
+│       pin_memory: true                                                        
+│                                                                               
+├── sampling
+│   └── predictor: ddpm_cache                                                   
+│       steps: 128                                                              
+│       noise_removal: true                                                     
+│       num_sample_batches: 3                                                   
+│       num_sample_log: 2                                                       
+│       semi_ar: false                                                          
+│       stride_length: 1                                                        
+│       num_strides: 1                                                          
+│       visualize: true                                                         
+│       visualize_save_path: /root/mdlm/exp_results/snapshot_text8.txt          
+│                                                                               
+├── training
+│   └── ema: 0.9999                                                             
+│       antithetic_sampling: true                                               
+│       importance_sampling: false                                              
+│       sampling_eps: 0.001                                                     
+│       change_of_variables: false                                              
+│                                                                               
+├── eval
+│   └── checkpoint_path: /root/mdlm/outputs/text8/2026.05.25/185907/checkpoints/
+│       disable_ema: false                                                      
+│       compute_generative_perplexity: false                                    
+│       perplexity_batch_size: 8                                                
+│       compute_perplexity_on_sanity: false                                     
+│       gen_ppl_eval_model_name_or_path: gpt2-large                             
+│       generate_samples: true                                                  
+│                                                                               
+├── optim
+│   └── weight_decay: 0                                                         
+│       lr: 0.0003                                                              
+│       beta1: 0.9                                                              
+│       beta2: 0.999                                                            
+│       eps: 1.0e-08                                                            
+│                                                                               
+├── trainer
+│   └── _target_: lightning.Trainer                                             
+│       accelerator: cuda                                                       
+│       num_nodes: 1                                                            
+│       devices: 1                                                              
+│       accumulate_grad_batches: 1                                              
+│       gradient_clip_val: 1.0                                                  
+│       precision: bf16                                                         
+│       num_sanity_val_steps: 2                                                 
+│       max_steps: 1000000                                                      
+│       log_every_n_steps: 10                                                   
+│       limit_train_batches: 1.0                                                
+│       limit_val_batches: 1.0                                                  
+│       val_check_interval: 10000                                               
+│                                                                               
+├── wandb
+│   └── project: text-diffusion                                                 
+│       notes: Mulan for text                                                   
+│       group: null                                                             
+│       job_type: null                                                          
+│       name: null                                                              
+│       id: None_1                                                              
+│       tags:                                                                   
+│       - loglinear                                                             
+│       - text8                                                                 
+│       - text8                                                                 
+│       offline: true                                                           
+│                                                                               
+├── checkpointing
+│   └── save_dir: /root/mdlm/outputs/text8/2026.05.25/221557                    
+│       resume_from_ckpt: true                                                  
+│       resume_ckpt_path: /root/mdlm/outputs/text8/2026.05.25/221557/checkpoints
+│                                                                               
+├── callbacks
+│   └── checkpoint_every_n_steps:                                               
+│         _target_: lightning.pytorch.callbacks.ModelCheckpoint                 
+│         save_top_k: -1                                                        
+│         save_last: true                                                       
+│         dirpath: /root/mdlm/outputs/text8/2026.05.25/221557/checkpoints       
+│         verbose: true                                                         
+│         auto_insert_metric_name: false                                        
+│         every_n_train_steps: 500                                              
+│       checkpoint_monitor:                                                     
+│         _target_: lightning.pytorch.callbacks.ModelCheckpoint                 
+│         monitor: val/nll                                                      
+│         mode: min                                                             
+│         save_top_k: 1                                                         
+│         save_last: false                                                      
+│         dirpath: /root/mdlm/outputs/text8/2026.05.25/221557/checkpoints       
+│         filename: best                                                        
+│         auto_insert_metric_name: false                                        
+│         verbose: true                                                         
+│       learning_rate_monitor:                                                  
+│         _target_: lightning.pytorch.callbacks.LearningRateMonitor             
+│         logging_interval: step                                                
+│                                                                               
+├── data
+│   └── train: text8                                                            
+│       valid: text8                                                            
+│       tokenizer_name_or_path: text8                                           
+│       cache_dir: /share/kuleshov/ssahoo/textdiffusion/data                    
+│       wrap: true                                                              
+│       streaming: false                                                        
+│                                                                               
+├── model
+│   └── name: tiny                                                              
+│       type: ddit                                                              
+│       hidden_size: 512                                                        
+│       cond_dim: 128                                                           
+│       length: 256                                                             
+│       n_blocks: 8                                                             
+│       n_heads: 8                                                              
+│       scale_by_sigma: true                                                    
+│       dropout: 0.1                                                            
+│       tie_word_embeddings: false                                              
+│                                                                               
+├── strategy
+│   └── _target_: lightning.pytorch.strategies.DDPStrategy                      
+│       find_unused_parameters: false                                           
+│                                                                               
+├── noise
+│   └── type: loglinear                                                         
+│       sigma_min: 0.0001                                                       
+│       sigma_max: 20                                                           
+│                                                                               
+└── lr_scheduler
+    └── _target_: transformers.get_constant_schedule_with_warmup                
+        num_warmup_steps: 2500                                                  
+                                                                                
+[2026-05-25 22:15:57,980][__main__][INFO] - Generating samples.
+/root/miniconda3/lib/python3.12/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+/root/mdlm/diffusion.py:315: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(dtype=torch.float32):
+/root/mdlm/models/dit.py:387: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+/root/mdlm/models/dit.py:146: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(enabled=False):
+/root/mdlm/models/dit.py:275: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(enabled=False):
+======================================================================
+Diffusion Reverse Process (t=1.0 → t=0.0)
+======================================================================
+t=1.000 (  0% done): [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [M...
+t=0.898 ( 10% done): [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [M...
+t=0.797 ( 20% done): c [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] l [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK...
+t=0.695 ( 30% done): cf [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] l [MASK] [MASK] [MASK] [MASK] [MASK] c [MASK] [MASK] e ...
+t=0.594 ( 41% done): cf [MASK] [MASK] [MASK] h [MASK] [MASK] l [MASK] [MASK] [MASK] [MASK] [MASK] c [MASK] [MASK] e [MASK...
+t=0.492 ( 51% done): cf [MASK] [MASK] [MASK] h [MASK] [MASK] l [MASK] t [MASK] [MASK] [MASK] c [MASK] ne [MASK] [MASK] h ...
+t=0.398 ( 60% done): cf [MASK] [MASK] bh [MASK] [MASK] l [MASK] t [MASK] [MASK] [MASK] c [MASK] ne [MASK] [MASK] h b [MAS...
+t=0.297 ( 70% done): cfz [MASK] bh [MASK] ql [MASK] t [MASK] [MASK] [MASK] chne [MASK] jh b [MASK] eymt lbo[CLS] [MASK] y...
+t=0.195 ( 80% done): cfz [MASK] bh [MASK] ql [MASK] t [MASK] [MASK] [MASK] chne [MASK] jh b [MASK] eymt lbo[CLS] [MASK] y...
+t=0.094 ( 91% done): cfzdbh [MASK] qlvt [MASK] [MASK] [MASK] chne [MASK] jh b [MASK] eymt lbo[CLS]byq[PAD]finnbmvpxlys[PA...
+t=0.047 ( 95% done): cfzdbh [MASK] qlvtf [MASK] xchne [MASK] jh bseymt lbo[CLS]byq[PAD]finnbmvpxlys[PAD][RESERVED] zbevcv...
+t=0.000 (100% done): cfzdbh[BOS]qlvtfkxchnecjh bseymt lbo[CLS]byq[PAD]finnbmvpxlys[PAD][RESERVED] zbevcvbpilf[UNK][EOS][S...
+======================================================================
+Snapshots saved to /root/mdlm/exp_results/snapshot_text8.txt
+======================================================================
+Diffusion Reverse Process (t=1.0 → t=0.0)
+======================================================================
+t=1.000 (  0% done): [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [M...
+t=0.898 ( 10% done): [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] y [MASK] o [MASK] [MASK] h [MA...
+t=0.797 ( 20% done): [MASK] f [MASK] [MASK] p [MASK] [MASK] [MASK] [MASK] [MASK] y [MASK] o [MASK] [MASK] h [MASK] [MASK]...
+t=0.695 ( 30% done): [MASK] f [MASK] [MASK] p [MASK] [MASK] [MASK] [MASK] [MASK] y [MASK] o [MASK] [MASK] h [MASK] [MASK]...
+t=0.594 ( 41% done): [MASK] f[EOS] [MASK] p [MASK] [MASK] v [MASK] [MASK] y [MASK] o [MASK] [MASK] h [MASK] [MASK] [BOS] ...
+t=0.492 ( 51% done): [MASK] f[EOS] [MASK] p [MASK] qv [MASK] [MASK] ydo [MASK] [MASK] h [MASK] [MASK] [BOS] [MASK] [MASK]...
+t=0.398 ( 60% done): [MASK] f[EOS] [MASK] p [MASK] qv [MASK] [MASK] ydo [MASK] [MASK] ht [MASK] [BOS] [MASK] [MASK] n[EOS...
+t=0.297 ( 70% done): [MASK] f[EOS] [MASK] p[CLS]qvh [MASK] ydo [MASK] [MASK] ht [MASK] [BOS] [MASK] vn[EOS]ue[RESERVED] [...
+t=0.195 ( 80% done): gf[EOS] [MASK] p[CLS]qvheydo [MASK] [MASK] ht [MASK] [BOS]svn[EOS]ue[RESERVED] [MASK] [MASK] g[EOS] ...
+t=0.094 ( 91% done): gf[EOS]dp[CLS]qvheydo[BOS]qhtq[BOS]svn[EOS]ue[RESERVED] [MASK] [MASK] g[EOS]r [MASK] gdlt[EOS]ladx[S...
+t=0.047 ( 95% done): gf[EOS]dp[CLS]qvheydo[BOS]qhtq[BOS]svn[EOS]ue[RESERVED] b [MASK] g[EOS]rjgdlt[EOS]ladx[SEP]yo[EOS]qp...
+t=0.000 (100% done): gf[EOS]dp[CLS]qvheydo[BOS]qhtq[BOS]svn[EOS]ue[RESERVED] byg[EOS]rjgdlt[EOS]ladx[SEP]yo[EOS]qpoiyocwz...
+======================================================================
+Snapshots saved to /root/mdlm/exp_results/snapshot_text8.txt
+======================================================================
+Diffusion Reverse Process (t=1.0 → t=0.0)
+======================================================================
+t=1.000 (  0% done): [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [M...
+t=0.898 ( 10% done): [MASK] [MASK] [MASK] [MASK] [MASK] d [MASK] [MASK] [MASK] [MASK] [MASK] x [MASK] [MASK] y [MASK] [MA...
+t=0.797 ( 20% done): s [MASK] [MASK] [MASK] bd [MASK] c [MASK] [MASK] x [MASK] [MASK] y [MASK] [MASK] [MASK] [UNK] [MASK]...
+t=0.695 ( 30% done): s [MASK] [MASK] [MASK] bd [MASK] c [MASK] xx [MASK] [MASK] y [MASK] [MASK] [MASK] [UNK]kg [MASK] a [...
+t=0.594 ( 41% done): sr [MASK] [MASK] bd [UNK]c [MASK] xx [MASK] [MASK] y [MASK] [MASK] m[UNK]kg [MASK] a [MASK] r[UNK] [...
+t=0.492 ( 51% done): sr [MASK] [MASK] bd [UNK]c [MASK] xxx [MASK] y [MASK] [MASK] m[UNK]kg [MASK] a [MASK] r[UNK] [MASK] ...
+t=0.398 ( 60% done): sr[BOS] [MASK] bd [UNK]c [MASK] xxx [MASK] y [MASK] [MASK] m[UNK]kg [MASK] a[BOS]r[UNK] [MASK] [MASK...
+t=0.297 ( 70% done): sr[BOS] [MASK] bd [UNK]c [MASK] xxx [MASK] y [MASK] [MASK] m[UNK]kg [MASK] a[BOS]r[UNK] [MASK] [MASK...
+t=0.195 ( 80% done): sr[BOS] [MASK] bd [UNK]ccxxx [MASK] y [MASK] [MASK] m[UNK]kg [MASK] a[BOS]r[UNK] [MASK] [MASK] [MASK...
+t=0.094 ( 91% done): sr[BOS][UNK]bd [UNK]ccxxxjyaim[UNK]kg [MASK] a[BOS]r[UNK] [MASK] ra[CLS][CLS]opbvqvq[BOS][CLS]d [MAS...
+t=0.047 ( 95% done): sr[BOS][UNK]bd [UNK]ccxxxjyaim[UNK]kgda[BOS]r[UNK] [MASK] ra[CLS][CLS]opbvqvq[BOS][CLS]d [MASK] zsdy...
+t=0.000 (100% done): sr[BOS][UNK]bd [UNK]ccxxxjyaim[UNK]kgda[BOS]r[UNK]wra[CLS][CLS]opbvqvq[BOS][CLS]dhzsdyvsiqqb[BOS][BO...
+======================================================================
+Snapshots saved to /root/mdlm/exp_results/snapshot_text8.txt
+Text samples: ['sr[BOS][UNK]bd [UNK]ccxxxjyaim[UNK]kgda[BOS]r[UNK]wra[CLS][CLS]opbvqvq[BOS][CLS]dhzsdyvsiqqb[BOS][BOS]catgxxqunrnzzzrkl[BOS] xa mtnr[EOS]vdwdn[PAD]r[CLS][EOS][PAD]iywg[PAD]svewqyhlq[SEP]bldjwlpqeq[EOS]ya[BOS]x [EOS]cjh[RESERVED]zxszhfxwnk[EOS]faebvavcherhpgsew[BOS]arpr[SEP]lo yy itfoqxq[CLS]bjfyf[PAD][BOS][UNK]zkjqow[CLS] [SEP][CLS]zsqrdhgpke[UNK]eriapv[CLS]wu keikgsiqca[EOS]b[CLS]v[RESERVED]wbkq[PAD]ex[SEP]ot[RESERVED][UNK]zixai tdk[PAD]a[CLS][RESERVED]dp']
+Generative perplexity: tensor(39.8491, device='cuda:0')
+EXIT=0
