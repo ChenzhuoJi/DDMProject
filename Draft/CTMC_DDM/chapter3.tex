@@ -1,0 +1,593 @@
+% ============================================================
+% 第三章：基于 CTMC 的离散扩散模型基本原理
+% 编译方式: xelatex -> bibtex -> xelatex -> xelatex
+% ============================================================
+\documentclass[12pt,a4paper]{ctexbook}
+
+% ---------- 导言区 ----------
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{caption}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{placeins}
+\usepackage{natbib}
+\usepackage{hyperref}
+\usepackage{bm}
+
+% 公式编号：阿拉伯数字（章节.序号）
+\renewcommand{\theequation}{\arabic{chapter}.\arabic{equation}}
+
+% 公式编号右对齐，Times New Roman 10.5pt
+\makeatletter
+\renewcommand{\maketag@@@}[1]{\hbox{\m@th\normalfont\fontsize{10.5}{12.6}\selectfont\fontfamily{ptm}\selectfont (#1)\quad}}
+\makeatother
+
+% 图表编号
+\renewcommand{\thefigure}{\thechapter.\arabic{figure}}
+\renewcommand{\thetable}{\thechapter.\arabic{table}}
+
+% ---------- 定理类环境 ----------
+\newtheorem{theorem}{定理}[chapter]
+\newtheorem{lemma}[theorem]{引理}
+\newtheorem{proposition}[theorem]{命题}
+\newtheorem{corollary}[theorem]{推论}
+
+\theoremstyle{definition}
+\newtheorem{definition}{定义}[chapter]
+\newtheorem{example}{例题}[chapter]
+\newtheorem{remark}{注解}[chapter]
+
+\renewenvironment{proof}[1][证明]{\par\noindent{\bfseries #1. }}{\hfill$\square$\par}
+
+% ---------- 正文 ----------
+\begin{document}
+
+\chapter{基于 CTMC 的离散扩散模型基本原理}
+
+连续时间马尔可夫链（Continuous-Time Markov Chain, CTMC）为离散状态空间的扩散模型提供了一个自然的数学框架。
+本章将从基本的 CTMC 理论出发，逐一建立前向噪声过程、反向生成过程、连续时间 ELBO、
+高效采样算法，最终统一离散时间与连续时间两种框架。
+
+% ============================================================
+\section{CTMC 回顾}
+\label{sec:ctmc-basics}
+
+在建立连续时间离散扩散模型之前，有必要回顾连续时间马尔可夫链的基本理论。
+这些内容既是随机过程课程的核心知识，也是后续所有推导的数学基础。
+本节将从扩散模型的实际需求出发，系统梳理 CTMC 的定义、基本方程、转移概率的闭式表达，以及时间反转等关键概念。
+
+\subsection{数学记号}
+
+\textbf{状态空间与数据。}考虑一个有限离散状态空间 $\mathcal{S} = \{1, 2, \dots, K\}$，
+其中 $K$ 为状态总数。一条具有 $D$ 个维度的数据样本表示为
+$\boldsymbol{x} = (x^1, x^2, \dots, x^D) \in \mathcal{S}^D$。
+时刻 $t$ 的随机变量记为 $\boldsymbol{x}_t$，其中 $t$ 为连续时间，取值范围为 $[0, T]$，
+$T$ 为终止时刻（通常取 $T = 1$）。
+
+\textbf{概率分布。}用 $q_t(\boldsymbol{x})$ 表示前向过程在时刻 $t$ 的边缘概率分布，
+$q_{t|s}(\boldsymbol{x}_t \mid \boldsymbol{x}_s)$ 表示转移核。
+$q_{t|0}(\boldsymbol{x}_t \mid \boldsymbol{x}_0)$ 表示从初始干净数据出发经过时间 $t$ 后的分布。
+模型分布的记号采用 $p_\theta$，其中 $\theta$ 为可学习参数。
+神经网络输出的去噪预测表示为 $p_{0|t}^\theta(\boldsymbol{x}_0 \mid \boldsymbol{x}_t)$，
+这一参数化方式源自 \cite[§2]{austin2021d3pm}，在连续时间框架中沿用自 \cite[§3.1]{campbell2022ctmc}。
+
+\textbf{矩阵基础。}速率矩阵（生成元矩阵）记为 $R_t \in \mathbb{R}^{K \times K}$，
+$[R_t]_{ij} = R_t(i, j)$ 表示时刻 $t$ 从状态 $i$ 到 $j$ 的瞬时速率
+\cite[§3.1]{campbell2022ctmc}。
+离散时间单步转移矩阵记为 $Q_t$，$[Q_t]_{ij} = q(x_t = j \mid x_{t-1} = i)$
+\cite[§2]{austin2021d3pm}。
+累积转移矩阵 $\overline{Q}_{t} = Q_1 Q_2 \cdots Q_t$ 刻画多步转移。
+
+\textbf{噪声调度。}连续时间噪声调度函数记为 $\beta(t)$，
+累积积分 $\overline{\beta}_{t|s} = \int_s^t \beta(\tau) \, d\tau$
+\cite[§2.1]{zhao2025ud3}。
+离散时间噪声参数 $\beta_t$ 与连续时间的关联为
+$\beta_t = 1 - \exp\bigl(-\int_{t-1}^t \beta(\tau)\,d\tau\bigr)$
+\cite[§4.1]{campbell2022ctmc}。
+
+\textbf{基本向量与矩阵。}$\mathbf{1}$ 表示全 1 列向量，
+$\mathbf{e}_i$ 表示第 $i$ 个标准基向量，$\delta_{ij}$ 为 Kronecker delta 符号，
+$\odot$ 表示逐元素乘积，$\langle \cdot, \cdot \rangle$ 表示向量内积。
+分类分布记为 $\text{Cat}(\boldsymbol{x}; \boldsymbol{p})$。
+所有转移矩阵使用行向量左乘约定：
+$\boldsymbol{x}_t \sim \text{Cat}(\boldsymbol{x}_{t-1} Q_t)$。
+
+\subsection{连续时间马尔可夫链的基本定义}
+
+连续时间马尔可夫链 $(\boldsymbol{x}_t)_{t \ge 0}$ 是一个在有限状态空间 $\mathcal{S}^D$ 上取值的随机过程，满足马尔可夫性：
+\begin{equation}
+\mathbb{P}(\boldsymbol{x}_t = \boldsymbol{y} \mid \{\boldsymbol{x}_u : u \le s\}) = \mathbb{P}(\boldsymbol{x}_t = \boldsymbol{y} \mid \boldsymbol{x}_s). \label{eq:markov-property}
+\end{equation}
+与离散时间马尔可夫链不同，CTMC 的状态可以在任意连续时刻发生变化，
+这一特性使其天然适合描述连续的噪声注入过程。
+
+\textbf{速率矩阵的定义与性质。}CTMC 的局部动力学完全由速率矩阵 $R_t$ 刻画。
+对于 $i \neq j$，$R_t(i, j) \ge 0$；对角线元素定义为
+\begin{equation}
+R_t(i, i) = -\sum_{j \neq i} R_t(i, j), \label{eq:rate-diagonal}
+\end{equation}
+以保证行和为零。速率矩阵在无限小时间间隔上的含义由 \cite[§3.1]{campbell2022ctmc} 给出：
+\begin{equation}
+q_{t+\Delta t \mid t}(j \mid i) = \delta_{ij} + R_t(i, j) \Delta t + o(\Delta t), \quad \Delta t \to 0. \label{eq:infinitesimal}
+\end{equation}
+
+\subsection{Kolmogorov 方程}
+
+CTMC 的边缘分布服从 Kolmogorov 前向方程 \cite[Appendix A]{campbell2022ctmc}：
+\begin{equation}
+\frac{\partial}{\partial t} q_t(\boldsymbol{x}) = \sum_{\boldsymbol{y}} q_t(\boldsymbol{y}) R_t(\boldsymbol{y}, \boldsymbol{x}). \label{eq:kolmogorov-fwd}
+\end{equation}
+矩阵形式（$q_t$ 为行向量）为
+\begin{equation}
+\frac{d}{dt} q_t = q_t R_t. \label{eq:kolmogorov-fwd-mat}
+\end{equation}
+对应的 Kolmogorov 后向方程为
+\begin{equation}
+\frac{\partial}{\partial t} q_{t|s}(\boldsymbol{x}_t \mid \boldsymbol{x}_s) = -\sum_{\boldsymbol{y}} R_t(\boldsymbol{x}_t, \boldsymbol{y}) \, q_{t|s}(\boldsymbol{y} \mid \boldsymbol{x}_s). \label{eq:kolmogorov-bwd}
+\end{equation}
+前向方程描述噪声如何破坏数据结构，后向方程则在反向过程的推导中发挥关键作用。
+
+\subsection{转移概率与矩阵指数}
+
+对于时间齐次的 CTMC，转移概率矩阵可解析地表示为矩阵指数：
+\begin{equation}
+P(t) = \exp(tR) = \sum_{n=0}^{\infty} \frac{(tR)^n}{n!}. \label{eq:matrix-exp}
+\end{equation}
+扩散模型中常使用可分离结构 \cite[§4.1]{campbell2022ctmc}\cite[§2.1]{zhao2025ud3}：
+\begin{equation}
+R_t = \beta(t) R_b, \label{eq:separable-rate}
+\end{equation}
+其中 $\beta(t) > 0$ 为噪声调度函数，$R_b$ 为基速率矩阵。在此设定下转移概率有闭式表达：
+\begin{equation}
+q_{t|s}(\boldsymbol{x}_t \mid \boldsymbol{x}_s) = \exp\!\Bigl( \overline{\beta}_{t|s} R_b \Bigr), \quad
+\overline{\beta}_{t|s} = \int_s^t \beta(\tau)\, d\tau. \label{eq:closed-form-trans}
+\end{equation}
+
+\subsection{平稳分布与可逆性}
+
+对于不可约非周期 CTMC，当 $t \to \infty$ 时 $q_t$ 收敛到平稳分布 $\pi$，满足 $\pi R = 0$。
+若 CTMC 满足细致平衡条件
+\begin{equation}
+\pi(i) R(i, j) = \pi(j) R(j, i), \quad \forall i \neq j, \label{eq:detailed-balance}
+\end{equation}
+则称该链关于 $\pi$ 可逆。在生成模型的时间反转构造中，可逆性扮演了基础性角色。
+
+\subsection{与离散时间马尔可夫链的关系}
+
+CTMC 与离散时间马尔可夫链之间的联系 \cite[Appendix A]{austin2021d3pm}：
+\begin{equation}
+Q = \exp(\Delta t R) = I + R \Delta t + o(\Delta t). \label{eq:embedding}
+\end{equation}
+一阶近似 $Q \approx I + R \Delta t$ 对应了连续过程的欧拉离散化。
+在 D3PM 等模型中 $Q_t$ 被直接参数化，在连续时间框架中则直接定义 $R_t$。
+两种视角的统一构成了 \ref{sec:ud3} 节的核心主题。
+
+\subsection{时间反转}
+
+CTMC 的时间反转过程仍是 CTMC。设正向过程 $(\boldsymbol{x}_t)_{t \in [0, T]}$，
+反向过程 $\bar{\boldsymbol{x}}_t = \boldsymbol{x}_{T - t}$ 的速率矩阵由
+\cite[§3.1 Proposition 1]{campbell2022ctmc} 给出：
+\begin{equation}
+\hat{R}_t(\boldsymbol{x}, \tilde{\boldsymbol{x}}) = R_{T-t}(\tilde{\boldsymbol{x}}, \boldsymbol{x}) \frac{q_{T-t}(\tilde{\boldsymbol{x}})}{q_{T-t}(\boldsymbol{x})}, \quad \boldsymbol{x} \neq \tilde{\boldsymbol{x}}. \label{eq:time-reversal}
+\end{equation}
+当正向过程将数据破坏为噪声时，这个比率引导反向过程从噪声向数据恢复。
+然而式 \eqref{eq:time-reversal} 中的边缘概率 $q_t$ 通常是不可知的，
+这正是引入神经网络进行近似的根本原因。
+
+% ============================================================
+\section{前向过程}
+\label{sec:forward}
+
+前向过程的目标是在 $[0, T]$ 上通过一个 CTMC 将数据分布 $q_0$ 逐渐转化为易于处理的参考分布 $q_T$。
+
+\subsection{可分离速率矩阵}
+
+前向速率矩阵取可分离形式 \cite[§4.1]{campbell2022ctmc}\cite[§2.1]{zhao2025ud3}：
+\begin{equation}
+R_t = \beta(t) R_b. \label{eq:separable-forward}
+\end{equation}
+代入 \eqref{eq:closed-form-trans} 得到从 $s$ 到 $t$ 的转移矩阵：
+\begin{equation}
+q_{t|s}(\boldsymbol{x}_t \mid \boldsymbol{x}_s) = \exp\!\Bigl( \overline{\beta}_{t|s} R_b \Bigr). \label{eq:trans-s-to-t}
+\end{equation}
+当 $s = 0$ 时，从干净数据出发的边际转移为
+\begin{equation}
+q_{t|0}(\boldsymbol{x}_t \mid \boldsymbol{x}_0) = \exp\!\Bigl( \overline{\beta}_{t} R_b \Bigr). \label{eq:trans-t-to-0}
+\end{equation}
+
+\subsection{基速率矩阵的设计}
+
+基速率矩阵 $R_b$ 的设计决定了噪声的微观结构，对应了三类转移矩阵的连续时间极限。
+
+\textbf{均匀速率。}\cite[§3]{austin2021d3pm}\cite[§4.1]{campbell2022ctmc}：
+\begin{equation}
+R_b = \mathbf{1} \mathbf{1}^\top - K I, \label{eq:uniform-rate}
+\end{equation}
+其矩阵指数为
+\begin{equation}
+\exp(\alpha R_b) = e^{-\alpha K} I + \frac{1 - e^{-\alpha K}}{K} \mathbf{1} \mathbf{1}^\top. \label{eq:uniform-exp}
+\end{equation}
+
+\textbf{吸收态速率。}\cite[§3]{austin2021d3pm}\cite[§4.1]{campbell2022ctmc}：
+引入吸收态 $m \in \mathcal{S}$（[MASK] token），
+\begin{equation}
+R_b = \mathbf{1} \mathbf{e}_m^\top - I, \label{eq:absorbing-rate}
+\end{equation}
+\begin{equation}
+\exp(\alpha R_b) = e^{-\alpha} I + (1 - e^{-\alpha}) \mathbf{1} \mathbf{e}_m^\top. \label{eq:absorbing-exp}
+\end{equation}
+
+\textbf{离散化高斯速率。}\cite[§3]{austin2021d3pm}：
+对于有序离散数据，
+\begin{equation}
+R_b(i, j) \propto \exp\!\Bigl( -\frac{|i - j|^2}{2\sigma^2} \Bigr), \quad i \neq j, \label{eq:gaussian-rate}
+\end{equation}
+保留了状态空间中的拓扑结构。
+
+\subsection{维度分解}
+\label{sec:dim-decomp}
+
+全空间的速率矩阵维度为 $K^D \times K^D$，通过维度分解 \cite[§4.2 Proposition 3]{campbell2022ctmc}：
+\begin{equation}
+R_t^{1:D}(\tilde{\boldsymbol{x}}^{1:D}, \boldsymbol{x}^{1:D}) = \sum_{d=1}^D R_t^d(\tilde{x}^d, x^d) \;\delta_{\boldsymbol{x}^{1:D \setminus d}, \tilde{\boldsymbol{x}}^{1:D \setminus d}}. \label{eq:dim-decomp-rate}
+\end{equation}
+一次跳转只能改变一个维度，非零元数从 $K^D$ 降至 $D(K-1)+1$。
+各维度之间前向独立：
+\begin{equation}
+q_{t|0}(\boldsymbol{x}_t \mid \boldsymbol{x}_0) = \prod_{d=1}^D q_{t|0}^d(x_t^d \mid x_0^d). \label{eq:dim-independence}
+\end{equation}
+这一独立性在反向过程中将被打破——去噪网络需要利用所有维度的信息进行联合预测。
+
+\subsection{与离散时间前向过程的关系}
+
+连续与离散框架的连接 \cite[Appendix A]{austin2021d3pm}\cite[§2.1]{zhao2025ud3}：
+\begin{equation}
+Q_t = \exp\!\Bigl( \beta_t R_b \Bigr), \quad \beta_t = \int_{t-1}^t \beta(\tau)\, d\tau. \label{eq:disc-conn}
+\end{equation}
+代入均匀速率和吸收态速率分别得到
+\begin{align}
+Q_t &= e^{-\beta_t K} I + \frac{1 - e^{-\beta_t K}}{K} \mathbf{1} \mathbf{1}^\top, \label{eq:uniform-disc} \\
+Q_t &= e^{-\beta_t} I + (1 - e^{-\beta_t}) \mathbf{1} \mathbf{e}_m^\top, \label{eq:absorbing-disc}
+\end{align}
+与 D3PM 的离散转移矩阵形式完全一致。这一对应关系揭示了两种框架的内在统一性。
+
+\subsection{噪声调度的选择}
+
+离散时间框架中常用的调度包括线性调度、余弦调度和 Sohl-Dickstein 调度
+\cite[§1]{austin2021d3pm}\cite[§4.1]{campbell2022ctmc}。
+连续时间框架中调度函数 $\beta(t)$ 的灵活性是其相较于固定步长离散模型的一个重要优势。
+
+% ============================================================
+\section{反向过程与神经网络预测训练}
+\label{sec:reverse}
+
+给定前向 CTMC 的速率矩阵 $R_t$，需要回答两个问题：
+精确的反向过程具有怎样的形式？如何用神经网络近似？
+
+\subsection{精确反向速率}
+
+由时间反转公式 \eqref{eq:time-reversal} 和 \cite[§3.1 Proposition 1]{campbell2022ctmc}，
+在正向时间 $t$ 处的反向速率为
+\begin{equation}
+\hat{R}_t(\boldsymbol{x}, \tilde{\boldsymbol{x}}) = R_t(\tilde{\boldsymbol{x}}, \boldsymbol{x}) \frac{q_t(\tilde{\boldsymbol{x}})}{q_t(\boldsymbol{x})}, \quad \boldsymbol{x} \neq \tilde{\boldsymbol{x}}. \label{eq:reverse-exact}
+\end{equation}
+这一公式的推导可从 Kolmogorov 后向方程出发，详见 \cite[Appendix B.1]{campbell2022ctmc}。
+然而边缘分布 $q_t$ 通常是未知且不可计算的，必须引入近似。
+
+\subsection{基于去噪网络的反向速率参数化}
+
+为获得可计算的反向速率，将 \eqref{eq:reverse-exact} 中的边缘概率比展开为
+\begin{equation}
+\frac{q_t(\tilde{\boldsymbol{x}})}{q_t(\boldsymbol{x})} = \frac{\sum_{\boldsymbol{x}_0} q_{t|0}(\tilde{\boldsymbol{x}} \mid \boldsymbol{x}_0) q_0(\boldsymbol{x}_0)}{\sum_{\boldsymbol{x}_0} q_{t|0}(\boldsymbol{x} \mid \boldsymbol{x}_0) q_0(\boldsymbol{x}_0)}. \label{eq:ratio-expand}
+\end{equation}
+按照 \cite[§2]{austin2021d3pm} 的 $x_0$ 参数化思路，引入神经网络 $p_{0|t}^\theta(\boldsymbol{x}_0 \mid \boldsymbol{x}_t)$
+来近似不可知的 $q_0$，得 \cite[§3.1]{campbell2022ctmc}：
+\begin{equation}
+\hat{R}_t^\theta(\boldsymbol{x}, \tilde{\boldsymbol{x}}) = R_t(\tilde{\boldsymbol{x}}, \boldsymbol{x}) \sum_{\boldsymbol{x}_0} \frac{q_{t|0}(\tilde{\boldsymbol{x}} \mid \boldsymbol{x}_0)}{q_{t|0}(\boldsymbol{x} \mid \boldsymbol{x}_0)} p_{0|t}^\theta(\boldsymbol{x}_0 \mid \boldsymbol{x}), \quad \boldsymbol{x} \neq \tilde{\boldsymbol{x}}. \label{eq:reverse-approx}
+\end{equation}
+对角线元素由行和归零条件确定：
+\begin{equation}
+\hat{R}_t^\theta(\boldsymbol{x}, \boldsymbol{x}) = -\sum_{\tilde{\boldsymbol{x}} \neq \boldsymbol{x}} \hat{R}_t^\theta(\boldsymbol{x}, \tilde{\boldsymbol{x}}). \label{eq:reverse-diag}
+\end{equation}
+当 $p_{0|t}^\theta$ 精确逼近真实后验 $q_{0|t}$ 时，\eqref{eq:reverse-approx} 退化为 \eqref{eq:reverse-exact}。
+
+\subsection{去噪网络的结构}
+
+去噪网络 $p_{0|t}^\theta(\boldsymbol{x}_0 \mid \boldsymbol{x}_t)$ 接收带噪数据和时间 $t$，
+输出 $K$ 维概率向量。各维度在给定 $\boldsymbol{x}_t$ 条件下条件独立：
+\begin{equation}
+p_{0|t}^\theta(\boldsymbol{x}_0^{1:D} \mid \boldsymbol{x}_t^{1:D}) = \prod_{d=1}^D p_{0|t}^{\theta,d}(x_0^d \mid \boldsymbol{x}_t^{1:D}). \label{eq:net-factorization}
+\end{equation}
+$\boldsymbol{x}_t$ 本身包含跨维度信息，网络需通过自注意力等机制捕获维度间的依赖关系。
+交叉熵训练目标为
+\begin{equation}
+L_{\text{CE}}(\theta) = \mathbb{E}_{t, q_{t|0}(\boldsymbol{x}_t \mid \boldsymbol{x}_0) q_0(\boldsymbol{x}_0)}\left[-\log p_{0|t}^\theta(\boldsymbol{x}_0 \mid \boldsymbol{x}_t)\right]. \label{eq:ce-loss}
+\end{equation}
+完整训练目标详见 \ref{sec:elbo} 节。
+
+\subsection{反向过程的维度分解}
+\label{sec:reverse-dim-decomp}
+
+反向过程继承前向的稀疏性结构 \cite[§4.2 Proposition 3]{campbell2022ctmc}：
+\begin{equation}
+\hat{R}_t^{1:D}(\boldsymbol{x}^{1:D}, \tilde{\boldsymbol{x}}^{1:D}) = \sum_{d=1}^D \hat{R}_t^d(\boldsymbol{x}^{1:D}, \tilde{x}^d) \;\delta_{\tilde{\boldsymbol{x}}^{1:D \setminus d}, \boldsymbol{x}^{1:D \setminus d}}. \label{eq:reverse-dim-decomp}
+\end{equation}
+其中偏反向速率为
+\begin{equation}
+\hat{R}_t^d(\boldsymbol{x}^{1:D}, \tilde{x}^d) = R_t^d(\tilde{x}^d, x^d) \sum_{x_0^d} \frac{q_{t|0}(\tilde{x}^d \mid x_0^d)}{q_{t|0}(x^d \mid x_0^d)} \; q_{0|t}(x_0^d \mid \boldsymbol{x}^{1:D}). \label{eq:reverse-dim-rate}
+\end{equation}
+$q_{0|t}(x_0^d \mid \boldsymbol{x}^{1:D})$ 是\textbf{跨维度耦合}的，这是生成模型需要学习的核心。
+参数化形式为
+\begin{equation}
+\hat{R}_t^{\theta,d}(\boldsymbol{x}^{1:D}, \tilde{x}^d) = R_t^d(\tilde{x}^d, x^d) \sum_{x_0^d} \frac{q_{t|0}(\tilde{x}^d \mid x_0^d)}{q_{t|0}(x^d \mid x_0^d)} \; p_{0|t}^{\theta,d}(x_0^d \mid \boldsymbol{x}^{1:D}). \label{eq:reverse-dim-param}
+\end{equation}
+单次网络前向即可得到整个 $D \times (K-1)$ 维的反向速率张量。
+
+\subsection{与离散时间反向过程的联系}
+
+D3PM 的 $x_0$ 参数化 \cite[§2]{austin2021d3pm} 为
+\begin{equation}
+p_\theta(\boldsymbol{x}_{t-1} \mid \boldsymbol{x}_t) \propto \sum_{\boldsymbol{x}_0} q(\boldsymbol{x}_{t-1}, \boldsymbol{x}_t \mid \boldsymbol{x}_0) \, \tilde{p}_\theta(\boldsymbol{x}_0 \mid \boldsymbol{x}_t). \label{eq:d3pm-reverse}
+\end{equation}
+连续时间参数化 \eqref{eq:reverse-approx} 可视为 \eqref{eq:d3pm-reverse} 在 $\Delta t \to 0$ 时的极限。
+两者的核心思想一致，为 \ref{sec:elbo} 节的极限推导奠定了基础。
+
+% ============================================================
+\section{连续时间 ELBO}
+\label{sec:elbo}
+
+训练目标是最小化生成分布与数据分布之间的差距，通过最大化证据下界实现。
+
+\subsection{变分下界}
+
+变分方法引入前向过程 $q$ 作为辅助分布：
+\begin{equation}
+-\log p_0^\theta(x_0) \leq \mathbb{E}_{q(x_{1:K} \mid x_0)}\left[-\log \frac{p_{0:K}^\theta(x_{0:K})}{q(x_{1:K} \mid x_0)}\right] =: \mathcal{L}_{\text{DT}}(\theta). \label{eq:elbo-basic}
+\end{equation}
+离散时间 ELBO 分解为三项 \cite[§2]{austin2021d3pm}：
+\begin{equation}
+\begin{aligned}
+\mathcal{L}_{\text{DT}}(\theta) = \mathbb{E}_{p_{\text{data}}(x_0)}\Big[
+&\underbrace{D_{\text{KL}}(q(x_T \mid x_0) \parallel p_{\text{ref}}(x_T))}_{L_T} \\
+&+ \sum_{t=2}^T \underbrace{\mathbb{E}_{q(x_t \mid x_0)}\big[D_{\text{KL}}(q(x_{t-1} \mid x_t, x_0) \parallel p_\theta(x_{t-1} \mid x_t))\big]}_{L_{t-1}} \\
+&+ \underbrace{\big(-\mathbb{E}_{q(x_1 \mid x_0)}[\log p_\theta(x_0 \mid x_1)]\big)}_{L_0}
+\Big]. \label{eq:elbo-discrete}
+\end{aligned}
+\end{equation}
+
+\subsection{用速率矩阵表示离散 ELBO 的局部项}
+
+将时间区间 $[0, T]$ 均匀划分为 $K$ 步，步长 $\Delta t = T/K$。
+由 \cite[Appendix B.2]{campbell2022ctmc}，转移核的无穷小展开为
+\begin{align}
+p_{k|k+1}^\theta(x_k \mid x_{k+1}) &= \delta_{x_k, x_{k+1}} + \hat{R}_k^\theta(x_{k+1}, x_k) \Delta t + o(\Delta t), \label{eq:p-expand} \\
+q_{k+1|k}(x_{k+1} \mid x_k) &= \delta_{x_k, x_{k+1}} + R_k(x_k, x_{k+1}) \Delta t + o(\Delta t). \label{eq:q-expand}
+\end{align}
+取对数并展开：
+\begin{equation}
+\log p_{k|k+1}^\theta(x_k \mid x_{k+1}) = \delta_{x_k, x_{k+1}} \hat{R}_k^\theta(x_k, x_k) \Delta t + (1 - \delta_{x_k, x_{k+1}}) \log\big(\hat{R}_k^\theta(x_{k+1}, x_k) \Delta t + o(\Delta t)\big) + o(\Delta t). \label{eq:log-p-expand}
+\end{equation}
+将 $\log(\hat{R}_k^\theta \Delta t + o(\Delta t)) = \log \Delta t + \log \hat{R}_k^\theta + o(1)$ 代入，
+$\log \Delta t$ 项与 $\theta$ 无关，经期望操作后仅贡献一个加性常数。
+整理得：
+\begin{equation}
+L_k = -\mathbb{E}_{q_k(x_k)}\Big[ \hat{R}_k^\theta(x_k, x_k) \Delta t + \sum_{x_{k+1} \neq x_k} R_k(x_k, x_{k+1}) \Delta t \log \hat{R}_k^\theta(x_{k+1}, x_k) + o(\Delta t) \Big] + C. \label{eq:l-k}
+\end{equation}
+
+\subsection{连续极限下的 ELBO}
+
+取 $\Delta t \to 0$（$K \to \infty$）的极限，离散求和转化为积分，
+得到连续时间 ELBO 的闭式表达 \cite[§3.2 Proposition 2]{campbell2022ctmc}：
+\begin{equation}
+\mathcal{L}_{\text{CT}}(\theta) = T \,\mathbb{E}_{t \sim \mathcal{U}(0,T),\; q_t(x),\; r_t(\tilde{x} \mid x)}\Big[ \Big\{\sum_{x' \neq x} \hat{R}_t^\theta(x, x')\Big\} - \mathcal{Z}^t(x) \log \big(\hat{R}_t^\theta(\tilde{x}, x)\big) \Big] + C. \label{eq:elbo-ct}
+\end{equation}
+其中
+\begin{equation}
+\mathcal{Z}^t(x) = \sum_{x' \neq x} R_t(x, x'), \qquad
+r_t(\tilde{x} \mid x) = \frac{R_t(x, \tilde{x})}{\mathcal{Z}^t(x)}\; (\tilde{x} \neq x). \label{eq:z-and-r}
+\end{equation}
+$\mathcal{Z}^t(x)$ 是总跳出速率，$r_t(\tilde{x} \mid x)$ 是跳转目的地的条件分布。
+式 \eqref{eq:elbo-ct} 的两项形成一种平衡：反向过程不应无理由跳转（第一项的惩罚），
+但当正向过程发生跳转时须学会从目的地跳回（第二项的鼓励）。
+
+\subsection{高效单次前向近似}
+
+式 \eqref{eq:elbo-ct} 理论上需要两次网络前向。\cite[Appendix C.4]{campbell2022ctmc} 提出近似：
+\begin{equation}
+\mathcal{L}_{\text{eCT}}(\theta) = T \,\mathbb{E}_{t \sim \mathcal{U}(0,T),\; q_t(x),\; r_t(\tilde{x} \mid x)}\Big[ \Big\{\sum_{x' \neq \tilde{x}} \hat{R}_t^\theta(\tilde{x}, x')\Big\} - \mathcal{Z}^t(x) \log \big(\hat{R}_t^\theta(\tilde{x}, x)\big) \Big] + C. \label{eq:elbo-ect}
+\end{equation}
+两项共享同一个 $\tilde{x}$，计算量减半且方差降低。
+
+\subsection{辅助去噪损失}
+
+为稳定训练，\cite[Appendix D]{campbell2022ctmc} 建议叠加直接去噪损失：
+\begin{equation}
+L_{\text{ll}}(\theta) = T \,\mathbb{E}_{t \sim \mathcal{U}(0,T),\; p_{\text{data}}(x_0),\; q_{t|0}(x \mid x_0)}\big[ -\log p_{0|t}^\theta(x_0 \mid x) \big]. \label{eq:ll-loss}
+\end{equation}
+当 $p_{0|t}^\theta = q_{0|t}$ 时 $L_{\text{ll}}$ 达到最小值 \cite[Proposition 8]{campbell2022ctmc}。
+完整目标为二者加权组合：
+\begin{equation}
+\min_\theta \mathcal{L}_{\text{CT}}(\theta) + \lambda L_{\text{ll}}(\theta). \label{eq:combined-loss}
+\end{equation}
+
+\subsection{高维数据的因子化 ELBO}
+
+利用维度分解 \cite[Appendix C.3 Proposition 7]{campbell2022ctmc}：
+\begin{equation}
+\begin{aligned}
+\mathcal{L}_{\text{CT}} = T \,\mathbb{E}_{t, p_{\text{data}}(\boldsymbol{x}_0^{1:D}), q_{t|0}(\boldsymbol{x}^{1:D} \mid \boldsymbol{x}_0^{1:D})}
+&\Big[ \sum_{d=1}^D \sum_{x'^d \neq x^d} \hat{R}_t^{\theta d}(\boldsymbol{x}^{1:D}, x'^d) \Big] \\
+&- T \,\mathbb{E}_{t, p_{\text{data}}(\boldsymbol{x}_0^{1:D}), \psi_t(\tilde{\boldsymbol{x}}^{1:D} \mid \boldsymbol{x}_0^{1:D})}
+\Big[ \sum_{d=1}^D \sum_{x^d \neq \tilde{x}^d} \phi_t(x^d \mid \tilde{\boldsymbol{x}}^{1:D}, \boldsymbol{x}_0^{1:D}) \mathcal{Z}^t(\tilde{\boldsymbol{x}}^{1:D/d} \circ x^d) \log \hat{R}_t^{\theta d}(\tilde{\boldsymbol{x}}^{1:D}, x^d) \Big] + C. \label{eq:elbo-factorized}
+\end{aligned}
+\end{equation}
+将计算复杂度降到 $O(DK)$，避免了全空间 $\mathcal{S}^D$ 上的求和。
+
+% ============================================================
+\section{反向采样算法}
+\label{sec:sampling}
+
+给定反向速率矩阵 $\hat{R}_t^\theta$，需要从中高效生成样本。
+Gillespie 精确模拟每步只改变一个维度，在高维数据上不可行。
+
+\subsection{Tau-Leaping 算法}
+
+Tau-leaping 假设速率矩阵在 $[t-\tau, t]$ 内恒定，批量处理所有可能跳转 \cite[§4.3]{campbell2022ctmc}：
+\begin{equation}
+P_{ds} \sim \text{Poisson}\Big( \tau \,\hat{R}_t^{\theta,d}(\boldsymbol{x}_t^{1:D}, s) \Big). \label{eq:poisson}
+\end{equation}
+更新规则为
+\begin{equation}
+\boldsymbol{x}_{t-\tau}^{1:D} = \boldsymbol{x}_t^{1:D} + \sum_{d=1}^D \sum_{s \neq x_t^d} P_{ds} \, (s - x_t^d) \, \boldsymbol{e}^d. \label{eq:tau-update}
+\end{equation}
+对于类别数据，同一维度的多次跳转无意义，当 $\sum_{s} P_{ds} > 1$ 时拒绝该维度更新：
+\begin{equation}
+\boldsymbol{x}_{t-\tau}^d \leftarrow \boldsymbol{x}_t^d. \label{eq:tau-reject}
+\end{equation}
+总网络前向次数为 $\text{NFE} = T / \tau$ \cite[§4.3]{campbell2022ctmc}。
+步长 $\tau$ 控制效率与精度的权衡。
+
+\subsection{Predictor-Corrector 采样器}
+
+\cite[§4.4 Proposition 4]{campbell2022ctmc} 发现 $R_t^c = R_t + \hat{R}_t$ 以 $q_t$ 为平稳分布：
+\begin{equation}
+R_t^c = R_t + \hat{R}_t. \label{eq:corrector-rate}
+\end{equation}
+实际流程 \cite[Appendix F.2]{campbell2022ctmc} 交替执行预测步（$\hat{R}_t^\theta$ tau-leaping）
+和校正步（$R_t^{c\theta} = \hat{R}_t^\theta + R_t$ tau-leaping）。
+校正步将近似误差向 $q_t$ "拉回"。CIFAR-10 上的实验结果见表 \ref{tab:cifar10}：
+
+\begin{table}[htbp]
+\centering
+\caption{CIFAR-10 上 Predictor-Corrector 采样器的性能对比 \cite{campbell2022ctmc}}
+\label{tab:cifar10}
+\begin{tabular}{lcc}
+\toprule
+方法 & IS ($\uparrow$) & FID ($\downarrow$) \\
+\midrule
+D3PM Gaussian & 8.56 & 7.34 \\
+$\tau$LDR-0（无校正步） & 8.74 & 8.10 \\
+$\tau$LDR-10（10 校正步） & 9.49 & 3.74 \\
+DDPM（连续状态空间） & 9.46 & 3.17 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{误差界}
+
+\cite[§4.5 Theorem 1]{campbell2022ctmc} 给出生成分布与数据分布之间的总变差上界：
+\begin{equation}
+\begin{aligned}
+\|\mathcal{L}(y_0) - p_{\text{data}}\|_{\text{TV}} \le\; &3MT \\
+&+ \Big\{ \big(|R| S D C_1\big)^2 + \frac{1}{2} C_2 (M + C_1 S D |R|) \Big\} \tau T \\
+&+ 2 \exp\!\Big\{ -\frac{T \log^2 2}{t_{\text{mix}} \log 4D} \Big\}. \label{eq:error-bound}
+\end{aligned}
+\end{equation}
+三项依次对应反向速率近似误差、tau-leaping 离散化误差和初始分布不匹配误差。
+最重要的结论是总误差关于维度 $D$ 的增长是 $\mathcal{O}(D^2)$ 而非 $\mathcal{O}(S^D)$，
+这一多项式可扩展性是 CTMC 框架的关键优势。
+
+% ============================================================
+\section{连续时间与离散时间模型的统一}
+\label{sec:ud3}
+
+前几节分别从离散时间和连续时间两个角度构建了扩散模型。
+\cite{zhao2025ud3} 提出的统一框架（UD3）使得两类模型共享完全相同的前向过程、反向参数化和采样流程。
+
+\subsection{幂等速率矩阵与统一的数学根源}
+
+统一的关键在于选择 \cite[§2.1]{zhao2025ud3}：
+\begin{equation}
+R_b = \mathbf{1} \mathbf{m}^\top - I, \label{eq:idempotent}
+\end{equation}
+其中 $\mathbf{m}$ 是平稳分布。$(-R_b)^2 = -R_b$ 的幂等性使矩阵指数坍缩为两项：
+\begin{equation}
+\exp(\alpha R_b) = e^{-\alpha} I + (1 - e^{-\alpha}) \mathbf{1} \mathbf{m}^\top. \label{eq:exp-collapse}
+\end{equation}
+令 $\overline{\alpha}_{t|s} = e^{-\overline{\beta}_{t|s}}$，则连续时间转移概率
+\begin{equation}
+\overline{Q}_{t|s} = \overline{\alpha}_{t|s} I + (1 - \overline{\alpha}_{t|s}) \mathbf{1} \mathbf{m}^\top \label{eq:q-bar}
+\end{equation}
+与离散时间形式完全相同，开启了统一的大门。
+
+\subsection{闭式后验}
+
+由 \cite[§2.2 Proposition 2.1]{zhao2025ud3}：
+\begin{equation}
+q(\boldsymbol{x}_s \mid \boldsymbol{x}_t, \boldsymbol{x}_0) =
+\begin{cases}
+\text{Cat}\big(\boldsymbol{x}_s; (1 - \lambda_{t|s})\boldsymbol{x}_t + \lambda_{t|s} \mathbf{m}\big), & \boldsymbol{x}_t = \boldsymbol{x}_0, \\[6pt]
+\text{Cat}\big(\boldsymbol{x}_s; (1 - \mu_{t|s})\boldsymbol{x}_0 + \mu_{t|s}\overline{\alpha}_{t|s}\boldsymbol{x}_t + \mu_{t|s}(1 - \overline{\alpha}_{t|s})\mathbf{m}\big), & \boldsymbol{x}_t \neq \boldsymbol{x}_0.
+\end{cases} \label{eq:posterior}
+\end{equation}
+系数为
+\begin{equation}
+\lambda_{t|s} = \frac{(1 - \overline{\alpha}_s)(1 - \overline{\alpha}_{t|s}) \langle \mathbf{m}, \boldsymbol{x}_t \rangle}{\overline{\alpha}_t + (1 - \overline{\alpha}_t) \langle \mathbf{m}, \boldsymbol{x}_t \rangle},
+\qquad
+\mu_{t|s} = \frac{1 - \overline{\alpha}_s}{1 - \overline{\alpha}_t}. \label{eq:lambda-mu}
+\end{equation}
+后验从 $\mathcal{O}(K)$ 求和简化为两个分情况讨论的闭式。
+
+\subsection{闭式反向分布}
+
+按照 $x_0$ 参数化，反向分布通过对 $\boldsymbol{x}_0$ 边缘化：
+\begin{equation}
+p_\theta(\boldsymbol{x}_s \mid \boldsymbol{x}_t) = \sum_{\boldsymbol{x}_0} q(\boldsymbol{x}_s \mid \boldsymbol{x}_t, \boldsymbol{x}_0) \, p_{0|t}^\theta(\boldsymbol{x}_0 \mid \boldsymbol{x}_t). \label{eq:p-reverse-sum}
+\end{equation}
+\cite[§2.2 Proposition 2.2]{zhao2025ud3} 证明该求和化简为三项混合分布：
+\begin{equation}
+p_\theta(\boldsymbol{x}_s \mid \boldsymbol{x}_t) = \text{Cat}\Big(\boldsymbol{x}_s; \;
+(1 - \mu_{t|s}) \, f_t^\theta(\boldsymbol{x}_t) + (\mu_{t|s}\overline{\alpha}_{t|s} + \gamma_{t|s}^\theta) \, \boldsymbol{x}_t + (\mu_{t|s}(1 - \overline{\alpha}_{t|s}) - \gamma_{t|s}^\theta) \, \mathbf{m} \Big), \label{eq:p-reverse-closed}
+\end{equation}
+其中 $f_t^\theta(\boldsymbol{x}_t) = p_{0|t}^\theta(\boldsymbol{x}_0 \mid \boldsymbol{x}_t)$，
+修正系数
+\begin{equation}
+\gamma_{t|s}^\theta := (\mu_{t|s} - \lambda_{t|s} - \mu_{t|s}\overline{\alpha}_{t|s}) \, \langle f_t^\theta(\boldsymbol{x}_t), \boldsymbol{x}_t \rangle. \label{eq:gamma}
+\end{equation}
+重参数化采样形式为
+\begin{equation}
+\boldsymbol{x}_{s|t} = \delta_{1, b_{s|t}} \, \tilde{\boldsymbol{x}}_{0|t} + \delta_{2, b_{s|t}} \, \boldsymbol{x}_t + \delta_{3, b_{s|t}} \, \mathbf{m},
+\qquad
+b_{s|t} \sim \text{Cat}\big([1 - \mu_{t|s}, \; \mu_{t|s}\overline{\alpha}_{t|s} + \gamma_{t|s}^\theta, \; \mu_{t|s}(1 - \overline{\alpha}_{t|s}) - \gamma_{t|s}^\theta]\big). \label{eq:reparam-sample}
+\end{equation}
+对任意时间调度均可使用，无需 tau-leaping 近似。
+
+\subsection{简化连续时间变分下界}
+
+UD3 引入比率估计器 $g_t^\theta$ 来近似边缘概率比 \cite[§3.1]{zhao2025ud3}：
+\begin{equation}
+g_t^\theta(x \mid y) := \sum_{x_0} \frac{q_{t|0}(x \mid x_0)}{q_{t|0}(y \mid x_0)} p_{0|t}^\theta(x_0 \mid y) \approx \frac{q_t(x)}{q_t(y)}. \label{eq:g-def}
+\end{equation}
+利用闭式结构向量化：
+\begin{equation}
+g_t^\theta(\cdot \mid \boldsymbol{y}) = \left[ \Big(1 - \frac{\overline{\alpha}_{t|0} \langle f_t^\theta(\boldsymbol{y}), \boldsymbol{y} \rangle}{\overline{\alpha}_{t|0} + (1 - \overline{\alpha}_{t|0})\langle \boldsymbol{y}, \mathbf{m} \rangle}\Big) \mathbf{m} + \frac{\overline{\alpha}_{t|0}}{1 - \overline{\alpha}_{t|0}} f_t^\theta(\boldsymbol{y}) \right] \odot \frac{\mathbf{1} - \boldsymbol{y}}{\langle \boldsymbol{y}, \mathbf{m} \rangle} + \boldsymbol{y}. \label{eq:g-closed}
+\end{equation}
+由此得到单次前向版本的连续时间 ELBO \cite[§3.1 Proposition 3.3]{zhao2025ud3}：
+\begin{equation}
+\mathcal{L}_{\text{CT}}^{\text{UD3}}(\theta) = T \,\mathbb{E}_{t, \boldsymbol{x}^{1:D} \sim q_{t|0}}\Big[
+\sum_{d=1}^D r_t^d(x^d \mid \cdot)^\top \Big(
+g_t^{\theta,d}(\cdot \mid \boldsymbol{x}^{1:D}) - \frac{q_{t|0}(\cdot \mid x_0^d) \odot \log g_t^{\theta,d}(\cdot \mid \boldsymbol{x}^{1:D})}{q_{t|0}(x^d \mid x_0^d)}
+\Big)
+\Big]. \label{eq:elbo-ud3}
+\end{equation}
+训练计算成本减半且方差更低。
+
+\subsection{统一的反向采样与双向收益}
+
+UD3 框架下离散时间和连续时间共享完全相同的反向采样流程。
+对连续时间模型，使用 \eqref{eq:p-reverse-closed} 的闭式反向分布可进行精确采样：
+\begin{equation}
+\boldsymbol{x}_{t_{i-1} \mid t_i} \sim p_\theta(\boldsymbol{x}_{t_{i-1}} \mid \boldsymbol{x}_{t_i}), \quad i = n, n-1, \dots, 1. \label{eq:unified-sample}
+\end{equation}
+这从根本上解决了 tau-leaping 的离散化误差。对离散时间模型，
+可利用连续时间框架的 MCMC 校正子来改善样本质量 \cite[Appendix A.19]{zhao2025ud3}。
+离散时间和连续时间并非两种不同模型，而是同一模型在不同时间离散化粒度下的实例。
+
+% ---------- 参考文献 ----------
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,116 @@
+# ============================================================
+# MDLM (Masked Diffusion Language Model) 配置文件
+# 论文: Simple and Effective Masked Diffusion Language Models
+# 仓库: https://github.com/kuleshov-group/mdlm
+# ============================================================
+
+defaults:
+  - _self_
+  - /callbacks: [checkpoint_every_n_steps, checkpoint_monitor, learning_rate_monitor]
+  - /data: openwebtext
+  - /model: small
+  - /strategy: ddp
+  - /noise: loglinear
+  - /lr_scheduler: constant_warmup
+
+# ========== 运行模式 ==========
+mode: train                # train / ppl_eval / sample_eval（训练/评估/采样）
+diffusion: absorbing_state # 扩散类型：吸收态
+backbone: dit              # 主干网络：dit / dimamba / ar / hf_dit
+parameterization: subs     # 参数化方式：subs(吸收态) / d3pm / sedd
+time_conditioning: False   # 是否使用时序条件
+T: 0                       # 0=连续时间 / 1000=离散时间
+subs_masking: False        # 是否使用 subs masking
+
+# ========== 随机种子 ==========
+seed: 1
+
+# ========== 数据加载 ==========
+loader:
+  global_batch_size: 512
+  eval_global_batch_size: ${.global_batch_size}
+  batch_size: ${div_up:${.global_batch_size}, ${eval:${trainer.devices} * ${trainer.num_nodes}}}
+  eval_batch_size: ${div_up:${.eval_global_batch_size}, ${eval:${trainer.devices} * ${trainer.num_nodes}}}
+  num_workers: ${eval:"len(__import__('os').sched_getaffinity(0))"}
+  pin_memory: True
+
+# ========== 采样参数 ==========
+sampling:
+  predictor: ddpm_cache    # 采样器：analytic / ddpm / ddpm_cache
+  steps: 128               # 采样步数（越多质量越好，推荐1000）
+  noise_removal: True      # 是否做最终去噪
+  num_sample_batches: 2    # 采样批次数
+  num_sample_log: 2        # 记录日志的样本数
+  semi_ar: False           # 半自回归扩展（突破长度限制）
+  stride_length: 1
+  num_strides: 1
+  visualize: False         # ★ 可视化开关：打印渐进式去噪快照
+  visualize_save_path: snapshots.txt  # ★ 快照输出路径
+
+# ========== 训练参数 ==========
+training:
+  ema: 0.9999              # 指数移动平均衰减率
+  antithetic_sampling: True # 对偶采样（减少方差）
+  importance_sampling: False
+  sampling_eps: 1e-3
+  change_of_variables: False
+
+# ========== 评估参数 ==========
+eval:
+  checkpoint_path: ''      # checkpoint 路径
+  disable_ema: False
+  compute_generative_perplexity: False
+  perplexity_batch_size: 8
+  compute_perplexity_on_sanity: False
+  gen_ppl_eval_model_name_or_path: gpt2-large  # 用于计算困惑度的评估模型
+  generate_samples: True
+
+# ========== 优化器 ==========
+optim:
+  weight_decay: 0
+  lr: 3e-4
+  beta1: 0.9
+  beta2: 0.999
+  eps: 1e-8
+
+# ========== Lightning Trainer ==========
+trainer:
+  _target_: lightning.Trainer
+  accelerator: cuda
+  num_nodes: 1
+  devices: ${device_count:}
+  accumulate_grad_batches: ${div_up:${loader.global_batch_size}, ${eval:${trainer.devices} * ${loader.batch_size} * ${trainer.num_nodes}}}
+  gradient_clip_val: 1.0
+  precision: 'bf16'
+  num_sanity_val_steps: 2
+  max_steps: 1_000_000
+  log_every_n_steps: 10
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
+  val_check_interval: 10000
+
+# ========== Wandb 日志 ==========
+wandb:
+  project: text-diffusion
+  notes: MDLM text diffusion
+  group: null
+  job_type: null
+  name: null
+  id: ${.name}_${seed}
+  tags:
+    - ${noise.type}
+    - ${data.train}
+    - ${data.valid}
+
+# ========== Hydra ==========
+hydra:
+  run:
+    dir: ./outputs/${data.train}/${now:%Y.%m.%d}/${now:%H%M%S}
+  job:
+    chdir: true
+
+# ========== Checkpoint ==========
+checkpointing:
+  save_dir: ${cwd:}
+  resume_from_ckpt: true
+  resume_ckpt_path: ${.save_dir}/checkpoints/last.ckpt

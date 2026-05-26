@@ -1,0 +1,185 @@
+Seed set to 123
+CONFIG
+├── mode
+│   └── sample_eval                                                             
+├── diffusion
+│   └── absorbing_state                                                         
+├── backbone
+│   └── hf_dit                                                                  
+├── parameterization
+│   └── subs                                                                    
+├── time_conditioning
+│   └── False                                                                   
+├── T
+│   └── 0                                                                       
+├── subs_masking
+│   └── False                                                                   
+├── seed
+│   └── 123                                                                     
+├── loader
+│   └── global_batch_size: 512                                                  
+│       eval_global_batch_size: 512                                             
+│       batch_size: 512                                                         
+│       eval_batch_size: 1                                                      
+│       num_workers: 208                                                        
+│       pin_memory: true                                                        
+│                                                                               
+├── sampling
+│   └── predictor: ddpm_cache                                                   
+│       steps: 128                                                              
+│       noise_removal: true                                                     
+│       num_sample_batches: 1                                                   
+│       num_sample_log: 2                                                       
+│       semi_ar: false                                                          
+│       stride_length: 1                                                        
+│       num_strides: 1                                                          
+│       visualize: true                                                         
+│       visualize_save_path: /root/mdlm/exp_results/snapshot_seed123.txt        
+│                                                                               
+├── training
+│   └── ema: 0.9999                                                             
+│       antithetic_sampling: true                                               
+│       importance_sampling: false                                              
+│       sampling_eps: 0.001                                                     
+│       change_of_variables: false                                              
+│                                                                               
+├── eval
+│   └── checkpoint_path: kuleshov-group/mdlm-owt                                
+│       disable_ema: false                                                      
+│       compute_generative_perplexity: false                                    
+│       perplexity_batch_size: 8                                                
+│       compute_perplexity_on_sanity: false                                     
+│       gen_ppl_eval_model_name_or_path: gpt2-large                             
+│       generate_samples: true                                                  
+│                                                                               
+├── optim
+│   └── weight_decay: 0                                                         
+│       lr: 0.0003                                                              
+│       beta1: 0.9                                                              
+│       beta2: 0.999                                                            
+│       eps: 1.0e-08                                                            
+│                                                                               
+├── trainer
+│   └── _target_: lightning.Trainer                                             
+│       accelerator: cuda                                                       
+│       num_nodes: 1                                                            
+│       devices: 1                                                              
+│       accumulate_grad_batches: 1                                              
+│       gradient_clip_val: 1.0                                                  
+│       precision: bf16                                                         
+│       num_sanity_val_steps: 2                                                 
+│       max_steps: 1000000                                                      
+│       log_every_n_steps: 10                                                   
+│       limit_train_batches: 1.0                                                
+│       limit_val_batches: 1.0                                                  
+│       val_check_interval: 10000                                               
+│                                                                               
+├── wandb
+│   └── project: text-diffusion                                                 
+│       notes: Mulan for text                                                   
+│       group: null                                                             
+│       job_type: null                                                          
+│       name: null                                                              
+│       id: None_123                                                            
+│       tags:                                                                   
+│       - loglinear                                                             
+│       - openwebtext-train                                                     
+│       - openwebtext-valid                                                     
+│                                                                               
+├── checkpointing
+│   └── save_dir: /root/mdlm/outputs/openwebtext-train/2026.05.25/171850        
+│       resume_from_ckpt: true                                                  
+│       resume_ckpt_path: /root/mdlm/outputs/openwebtext-train/2026.05.25/171850
+│                                                                               
+├── callbacks
+│   └── checkpoint_every_n_steps:                                               
+│         _target_: lightning.pytorch.callbacks.ModelCheckpoint                 
+│         save_top_k: -1                                                        
+│         save_last: true                                                       
+│         dirpath: /root/mdlm/outputs/openwebtext-train/2026.05.25/171850/checkp
+│         verbose: true                                                         
+│         auto_insert_metric_name: false                                        
+│         every_n_train_steps: 500                                              
+│       checkpoint_monitor:                                                     
+│         _target_: lightning.pytorch.callbacks.ModelCheckpoint                 
+│         monitor: val/nll                                                      
+│         mode: min                                                             
+│         save_top_k: 1                                                         
+│         save_last: false                                                      
+│         dirpath: /root/mdlm/outputs/openwebtext-train/2026.05.25/171850/checkp
+│         filename: best                                                        
+│         auto_insert_metric_name: false                                        
+│         verbose: true                                                         
+│       learning_rate_monitor:                                                  
+│         _target_: lightning.pytorch.callbacks.LearningRateMonitor             
+│         logging_interval: step                                                
+│                                                                               
+├── data
+│   └── train: openwebtext-train                                                
+│       valid: openwebtext-valid                                                
+│       tokenizer_name_or_path: gpt2                                            
+│       cache_dir: /share/kuleshov/ssahoo/textdiffusion/data                    
+│       wrap: true                                                              
+│       streaming: false                                                        
+│                                                                               
+├── model
+│   └── name: small                                                             
+│       type: ddit                                                              
+│       hidden_size: 768                                                        
+│       cond_dim: 128                                                           
+│       length: 256                                                             
+│       n_blocks: 12                                                            
+│       n_heads: 12                                                             
+│       scale_by_sigma: true                                                    
+│       dropout: 0.1                                                            
+│       tie_word_embeddings: false                                              
+│                                                                               
+├── strategy
+│   └── _target_: lightning.pytorch.strategies.DDPStrategy                      
+│       find_unused_parameters: false                                           
+│                                                                               
+├── noise
+│   └── type: loglinear                                                         
+│       sigma_min: 0.0001                                                       
+│       sigma_max: 20                                                           
+│                                                                               
+└── lr_scheduler
+    └── _target_: transformers.get_constant_schedule_with_warmup                
+        num_warmup_steps: 2500                                                  
+                                                                                
+/root/miniconda3/lib/python3.12/site-packages/huggingface_hub/file_download.py:949: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+[2026-05-25 17:18:53,134][__main__][INFO] - Generating samples.
+/root/mdlm/diffusion.py:315: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(dtype=torch.float32):
+/root/.cache/huggingface/modules/transformers_modules/kuleshov-group/mdlm-owt/d0958fa851335ece6c15260ce0025f030673c0fb/modeling_mdlm.py:397: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+/root/.cache/huggingface/modules/transformers_modules/kuleshov-group/mdlm-owt/d0958fa851335ece6c15260ce0025f030673c0fb/modeling_mdlm.py:147: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(enabled=False):
+/root/.cache/huggingface/modules/transformers_modules/kuleshov-group/mdlm-owt/d0958fa851335ece6c15260ce0025f030673c0fb/modeling_mdlm.py:285: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast(enabled=False):
+Error while downloading from https://cas-bridge.xethub.hf.co/xet-bridge-us/621ffdc036468d709f17434a/0f08041eb1fb64469e955848d7781f73c640d076cdcf225624cdd3c5fe0f1fb8?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cas%2F20260525%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260525T091858Z&X-Amz-Expires=3600&X-Amz-Signature=6ee6c170165e96a9d66036ba68183d372233b43f022e2e92ee3e35780f2fce01&X-Amz-SignedHeaders=host&X-Xet-Cas-Uid=62171e3b6a99db28e0b3159d&response-content-disposition=inline%3B+filename*%3DUTF-8%27%27model.safetensors%3B+filename%3D%22model.safetensors%22%3B&x-amz-checksum-mode=ENABLED&x-id=GetObject&Expires=1779704338&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc3OTcwNDMzOH19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2FzLWJyaWRnZS54ZXRodWIuaGYuY28veGV0LWJyaWRnZS11cy82MjFmZmRjMDM2NDY4ZDcwOWYxNzQzNGEvMGYwODA0MWViMWZiNjQ0NjllOTU1ODQ4ZDc3ODFmNzNjNjQwZDA3NmNkY2YyMjU2MjRjZGQzYzVmZTBmMWZiOCoifV19&Signature=TqDb-m0Sv%7EQGDgkCp2RCZIPWz5UHD-jyIdOJSZz%7ESH8aR8KOAohProXfYdh11sT-2eQB%7EgXs%7EVT9c8DwiDLS-NPwb7UXRXMAMPjE%7EgvAOgbc5hQz6%7EGb3qYg3IareNUAmg4Notx71vhJsK-WaB-iyACyKtcxAf4OlgRsxhClbCSXVoXAMtfoESTxXx79nKAYKJvLlYi5uon53NYNAlxahkOIblAYjjQdOsC3jVIQAJtR2IVqHSxwBVLvppL45vzFFllI8z2GXusNowm9fIbujt6imTpt5bRvoHxWdW%7ED1ksMByxRrBWeH2CbbLti9O8-TrOQ38WrgA6GKlDu9wNiRg__&Key-Pair-Id=K2L8F4GPSG1IFC: HTTPSConnectionPool(host='cas-bridge.xethub.hf.co', port=443): Read timed out.
+Trying to resume download...
+======================================================================
+Diffusion Reverse Process (t=1.0 → t=0.0)
+======================================================================
+t=1.000 (  0% done): [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [M...
+t=0.898 ( 10% done): [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [M...
+t=0.797 ( 20% done): [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] k [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] ...
+t=0.695 ( 30% done): [MASK] [MASK] is [MASK] [MASK] [MASK] [MASK] k [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MAS...
+t=0.594 ( 41% done): [MASK] [MASK] is [MASK] [MASK] [MASK] [MASK] k can [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] ...
+t=0.492 ( 51% done): [MASK] [MASK] is [MASK] [MASK] [MASK] [MASK] k can [MASK] [MASK] [MASK] [MASK] [MASK] [MASK] , an an...
+t=0.398 ( 60% done): [MASK] devastating is [MASK] [MASK] [MASK] [MASK] k can [MASK] [MASK] [MASK] [MASK] [MASK] is, an an...
+t=0.297 ( 70% done): ; devastating is je en; ofk can [MASK] [MASK] [MASK] [MASK] [MASK] is, an an [MASK] z which for. tha...
+t=0.195 ( 80% done): ; devastating is je en; ofk can [MASK] [MASK] [MASK] ( [MASK] is, an an [MASK] z which for. that and...
+t=0.094 ( 91% done): ; devastating is je en; ofk can [MASK] two [MASK] ( [MASK] is, an anantz which for. that and the [MA...
+t=0.047 ( 95% done): ; devastating is je en; ofk canl two, ( [MASK] is, an anantz which for. that and the [MASK] du said,...
+t=0.000 (100% done): ; devastating is je en; ofk canl two, ( recommended is, an anantz which for. that and the news du sa...
+======================================================================
+Snapshots saved to /root/mdlm/exp_results/snapshot_seed123.txt
+[2026-05-25 17:33:17,754][huggingface_hub.file_download][WARNING] - Error while downloading from https://cas-bridge.xethub.hf.co/xet-bridge-us/621ffdc036468d709f17434a/0f08041eb1fb64469e955848d7781f73c640d076cdcf225624cdd3c5fe0f1fb8?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cas%2F20260525%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260525T091858Z&X-Amz-Expires=3600&X-Amz-Signature=6ee6c170165e96a9d66036ba68183d372233b43f022e2e92ee3e35780f2fce01&X-Amz-SignedHeaders=host&X-Xet-Cas-Uid=62171e3b6a99db28e0b3159d&response-content-disposition=inline%3B+filename*%3DUTF-8%27%27model.safetensors%3B+filename%3D%22model.safetensors%22%3B&x-amz-checksum-mode=ENABLED&x-id=GetObject&Expires=1779704338&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc3OTcwNDMzOH19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2FzLWJyaWRnZS54ZXRodWIuaGYuY28veGV0LWJyaWRnZS11cy82MjFmZmRjMDM2NDY4ZDcwOWYxNzQzNGEvMGYwODA0MWViMWZiNjQ0NjllOTU1ODQ4ZDc3ODFmNzNjNjQwZDA3NmNkY2YyMjU2MjRjZGQzYzVmZTBmMWZiOCoifV19&Signature=TqDb-m0Sv%7EQGDgkCp2RCZIPWz5UHD-jyIdOJSZz%7ESH8aR8KOAohProXfYdh11sT-2eQB%7EgXs%7EVT9c8DwiDLS-NPwb7UXRXMAMPjE%7EgvAOgbc5hQz6%7EGb3qYg3IareNUAmg4Notx71vhJsK-WaB-iyACyKtcxAf4OlgRsxhClbCSXVoXAMtfoESTxXx79nKAYKJvLlYi5uon53NYNAlxahkOIblAYjjQdOsC3jVIQAJtR2IVqHSxwBVLvppL45vzFFllI8z2GXusNowm9fIbujt6imTpt5bRvoHxWdW%7ED1ksMByxRrBWeH2CbbLti9O8-TrOQ38WrgA6GKlDu9wNiRg__&Key-Pair-Id=K2L8F4GPSG1IFC: HTTPSConnectionPool(host='cas-bridge.xethub.hf.co', port=443): Read timed out.
+Trying to resume download...
+Error while downloading from https://cas-bridge.xethub.hf.co/xet-bridge-us/621ffdc036468d709f17434a/0f08041eb1fb64469e955848d7781f73c640d076cdcf225624cdd3c5fe0f1fb8?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cas%2F20260525%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260525T091858Z&X-Amz-Expires=3600&X-Amz-Signature=6ee6c170165e96a9d66036ba68183d372233b43f022e2e92ee3e35780f2fce01&X-Amz-SignedHeaders=host&X-Xet-Cas-Uid=62171e3b6a99db28e0b3159d&response-content-disposition=inline%3B+filename*%3DUTF-8%27%27model.safetensors%3B+filename%3D%22model.safetensors%22%3B&x-amz-checksum-mode=ENABLED&x-id=GetObject&Expires=1779704338&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc3OTcwNDMzOH19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2FzLWJyaWRnZS54ZXRodWIuaGYuY28veGV0LWJyaWRnZS11cy82MjFmZmRjMDM2NDY4ZDcwOWYxNzQzNGEvMGYwODA0MWViMWZiNjQ0NjllOTU1ODQ4ZDc3ODFmNzNjNjQwZDA3NmNkY2YyMjU2MjRjZGQzYzVmZTBmMWZiOCoifV19&Signature=TqDb-m0Sv%7EQGDgkCp2RCZIPWz5UHD-jyIdOJSZz%7ESH8aR8KOAohProXfYdh11sT-2eQB%7EgXs%7EVT9c8DwiDLS-NPwb7UXRXMAMPjE%7EgvAOgbc5hQz6%7EGb3qYg3IareNUAmg4Notx71vhJsK-WaB-iyACyKtcxAf4OlgRsxhClbCSXVoXAMtfoESTxXx79nKAYKJvLlYi5uon53NYNAlxahkOIblAYjjQdOsC3jVIQAJtR2IVqHSxwBVLvppL45vzFFllI8z2GXusNowm9fIbujt6imTpt5bRvoHxWdW%7ED1ksMByxRrBWeH2CbbLti9O8-TrOQ38WrgA6GKlDu9wNiRg__&Key-Pair-Id=K2L8F4GPSG1IFC: HTTPSConnectionPool(host='cas-bridge.xethub.hf.co', port=443): Read timed out.
+Trying to resume download...
+[2026-05-25 17:41:19,522][huggingface_hub.file_download][WARNING] - Error while downloading from https://cas-bridge.xethub.hf.co/xet-bridge-us/621ffdc036468d709f17434a/0f08041eb1fb64469e955848d7781f73c640d076cdcf225624cdd3c5fe0f1fb8?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cas%2F20260525%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260525T091858Z&X-Amz-Expires=3600&X-Amz-Signature=6ee6c170165e96a9d66036ba68183d372233b43f022e2e92ee3e35780f2fce01&X-Amz-SignedHeaders=host&X-Xet-Cas-Uid=62171e3b6a99db28e0b3159d&response-content-disposition=inline%3B+filename*%3DUTF-8%27%27model.safetensors%3B+filename%3D%22model.safetensors%22%3B&x-amz-checksum-mode=ENABLED&x-id=GetObject&Expires=1779704338&Policy=eyJTdGF0ZW1lbnQiOlt7IkNvbmRpdGlvbiI6eyJEYXRlTGVzc1RoYW4iOnsiQVdTOkVwb2NoVGltZSI6MTc3OTcwNDMzOH19LCJSZXNvdXJjZSI6Imh0dHBzOi8vY2FzLWJyaWRnZS54ZXRodWIuaGYuY28veGV0LWJyaWRnZS11cy82MjFmZmRjMDM2NDY4ZDcwOWYxNzQzNGEvMGYwODA0MWViMWZiNjQ0NjllOTU1ODQ4ZDc3ODFmNzNjNjQwZDA3NmNkY2YyMjU2MjRjZGQzYzVmZTBmMWZiOCoifV19&Signature=TqDb-m0Sv%7EQGDgkCp2RCZIPWz5UHD-jyIdOJSZz%7ESH8aR8KOAohProXfYdh11sT-2eQB%7EgXs%7EVT9c8DwiDLS-NPwb7UXRXMAMPjE%7EgvAOgbc5hQz6%7EGb3qYg3IareNUAmg4Notx71vhJsK-WaB-iyACyKtcxAf4OlgRsxhClbCSXVoXAMtfoESTxXx79nKAYKJvLlYi5uon53NYNAlxahkOIblAYjjQdOsC3jVIQAJtR2IVqHSxwBVLvppL45vzFFllI8z2GXusNowm9fIbujt6imTpt5bRvoHxWdW%7ED1ksMByxRrBWeH2CbbLti9O8-TrOQ38WrgA6GKlDu9wNiRg__&Key-Pair-Id=K2L8F4GPSG1IFC: HTTPSConnectionPool(host='cas-bridge.xethub.hf.co', port=443): Read timed out.
+Trying to resume download...

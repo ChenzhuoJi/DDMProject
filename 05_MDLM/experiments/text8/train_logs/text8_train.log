@@ -1,0 +1,232 @@
+Seed set to 1
+CONFIG
+├── mode
+│   └── train                                                                   
+├── diffusion
+│   └── absorbing_state                                                         
+├── backbone
+│   └── dit                                                                     
+├── parameterization
+│   └── subs                                                                    
+├── time_conditioning
+│   └── False                                                                   
+├── T
+│   └── 0                                                                       
+├── subs_masking
+│   └── False                                                                   
+├── seed
+│   └── 1                                                                       
+├── loader
+│   └── global_batch_size: 512                                                  
+│       eval_global_batch_size: 512                                             
+│       batch_size: 256                                                         
+│       eval_batch_size: 256                                                    
+│       num_workers: 208                                                        
+│       pin_memory: true                                                        
+│                                                                               
+├── sampling
+│   └── predictor: ddpm_cache                                                   
+│       steps: 128                                                              
+│       noise_removal: true                                                     
+│       num_sample_batches: 2                                                   
+│       num_sample_log: 2                                                       
+│       semi_ar: false                                                          
+│       stride_length: 1                                                        
+│       num_strides: 1                                                          
+│       visualize: false                                                        
+│       visualize_save_path: snapshots.txt                                      
+│                                                                               
+├── training
+│   └── ema: 0.9999                                                             
+│       antithetic_sampling: true                                               
+│       importance_sampling: false                                              
+│       sampling_eps: 0.001                                                     
+│       change_of_variables: false                                              
+│                                                                               
+├── eval
+│   └── checkpoint_path: ''                                                     
+│       disable_ema: false                                                      
+│       compute_generative_perplexity: false                                    
+│       perplexity_batch_size: 8                                                
+│       compute_perplexity_on_sanity: false                                     
+│       gen_ppl_eval_model_name_or_path: gpt2-large                             
+│       generate_samples: true                                                  
+│                                                                               
+├── optim
+│   └── weight_decay: 0                                                         
+│       lr: 0.0003                                                              
+│       beta1: 0.9                                                              
+│       beta2: 0.999                                                            
+│       eps: 1.0e-08                                                            
+│                                                                               
+├── trainer
+│   └── _target_: lightning.Trainer                                             
+│       accelerator: cuda                                                       
+│       num_nodes: 1                                                            
+│       devices: 1                                                              
+│       accumulate_grad_batches: 2                                              
+│       gradient_clip_val: 1.0                                                  
+│       precision: bf16                                                         
+│       num_sanity_val_steps: 2                                                 
+│       max_steps: 50000                                                        
+│       log_every_n_steps: 10                                                   
+│       limit_train_batches: 1.0                                                
+│       limit_val_batches: 1.0                                                  
+│       val_check_interval: 10000                                               
+│                                                                               
+├── wandb
+│   └── project: text-diffusion                                                 
+│       notes: Mulan for text                                                   
+│       group: null                                                             
+│       job_type: null                                                          
+│       name: null                                                              
+│       id: None_1                                                              
+│       tags:                                                                   
+│       - loglinear                                                             
+│       - text8                                                                 
+│       - text8                                                                 
+│       offline: true                                                           
+│                                                                               
+├── checkpointing
+│   └── save_dir: /root/mdlm/outputs/text8/2026.05.25/182523                    
+│       resume_from_ckpt: true                                                  
+│       resume_ckpt_path: /root/mdlm/outputs/text8/2026.05.25/182523/checkpoints
+│                                                                               
+├── callbacks
+│   └── checkpoint_every_n_steps:                                               
+│         _target_: lightning.pytorch.callbacks.ModelCheckpoint                 
+│         save_top_k: -1                                                        
+│         save_last: true                                                       
+│         dirpath: /root/mdlm/outputs/text8/2026.05.25/182523/checkpoints       
+│         verbose: true                                                         
+│         auto_insert_metric_name: false                                        
+│         every_n_train_steps: 500                                              
+│       checkpoint_monitor:                                                     
+│         _target_: lightning.pytorch.callbacks.ModelCheckpoint                 
+│         monitor: val/nll                                                      
+│         mode: min                                                             
+│         save_top_k: 1                                                         
+│         save_last: false                                                      
+│         dirpath: /root/mdlm/outputs/text8/2026.05.25/182523/checkpoints       
+│         filename: best                                                        
+│         auto_insert_metric_name: false                                        
+│         verbose: true                                                         
+│       learning_rate_monitor:                                                  
+│         _target_: lightning.pytorch.callbacks.LearningRateMonitor             
+│         logging_interval: step                                                
+│                                                                               
+├── data
+│   └── train: text8                                                            
+│       valid: text8                                                            
+│       tokenizer_name_or_path: text8                                           
+│       cache_dir: /share/kuleshov/ssahoo/textdiffusion/data                    
+│       wrap: true                                                              
+│       streaming: false                                                        
+│                                                                               
+├── model
+│   └── name: tiny                                                              
+│       type: ddit                                                              
+│       hidden_size: 512                                                        
+│       cond_dim: 128                                                           
+│       length: 256                                                             
+│       n_blocks: 8                                                             
+│       n_heads: 8                                                              
+│       scale_by_sigma: true                                                    
+│       dropout: 0.1                                                            
+│       tie_word_embeddings: false                                              
+│                                                                               
+├── strategy
+│   └── _target_: lightning.pytorch.strategies.DDPStrategy                      
+│       find_unused_parameters: false                                           
+│                                                                               
+├── noise
+│   └── type: loglinear                                                         
+│       sigma_min: 0.0001                                                       
+│       sigma_max: 20                                                           
+│                                                                               
+└── lr_scheduler
+    └── _target_: transformers.get_constant_schedule_with_warmup                
+        num_warmup_steps: 2500                                                  
+                                                                                
+[2026-05-25 18:25:23,833][__main__][INFO] - Starting Training.
+[2026-05-25 18:25:23,843][dataloader][INFO] - Loading data from: /share/kuleshov/ssahoo/textdiffusion/data/text8_train_bs256_wrapped.dat
+[2026-05-25 18:25:23,854][dataloader][INFO] - Loading data from: /share/kuleshov/ssahoo/textdiffusion/data/text8_test_bs256_wrapped.dat
+Printing train dataloader batch.
+Batch input_ids.shape torch.Size([256, 256])
+First 64 tokens: [BOS]d could not deny them access to the evidence used against them 
+ids: tensor([ 2, 11, 34, 10, 22, 28, 19, 11, 34, 21, 22, 27, 34, 11, 12, 21, 32, 34,
+        27, 15, 12, 20, 34,  8, 10, 10, 12, 26, 26, 34, 27, 22, 34, 27, 15, 12,
+        34, 12, 29, 16, 11, 12, 21, 10, 12, 34, 28, 26, 12, 11, 34,  8, 14,  8,
+        16, 21, 26, 27, 34, 27, 15, 12, 20, 34])
+Last 64 tokens: rs could not be classified as prisoners of war and upheld milit[EOS]
+ids: tensor([25, 26, 34, 10, 22, 28, 19, 11, 34, 21, 22, 27, 34,  9, 12, 34, 10, 19,
+         8, 26, 26, 16, 13, 16, 12, 11, 34,  8, 26, 34, 23, 25, 16, 26, 22, 21,
+        12, 25, 26, 34, 22, 13, 34, 30,  8, 25, 34,  8, 21, 11, 34, 28, 23, 15,
+        12, 19, 11, 34, 20, 16, 19, 16, 27,  3])
+Printing valid dataloader batch.
+Error executing job with overrides: ['model=tiny', 'data=text8', 'parameterization=subs', 'model.length=256', 'trainer.max_steps=50000', 'loader.batch_size=256', 'loader.eval_batch_size=256', '+wandb.offline=true']
+Exception in thread Thread-2 (_pin_memory_loop):
+Traceback (most recent call last):
+  File "/root/miniconda3/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/root/miniconda3/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/utils/data/_utils/pin_memory.py", line 61, in _pin_memory_loop
+    do_one_step()
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/utils/data/_utils/pin_memory.py", line 37, in do_one_step
+    r = in_queue.get(timeout=MP_STATUS_CHECK_INTERVAL)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/multiprocessing/queues.py", line 122, in get
+    return _ForkingPickler.loads(res)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/multiprocessing/reductions.py", line 541, in rebuild_storage_fd
+    fd = df.detach()
+         ^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/multiprocessing/resource_sharer.py", line 58, in detach
+    return reduction.recv_handle(conn)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/multiprocessing/reduction.py", line 189, in recv_handle
+    return recvfds(s, 1)[0]
+           ^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/multiprocessing/reduction.py", line 164, in recvfds
+    raise RuntimeError('received %d items of ancdata' %
+RuntimeError: received 0 items of ancdata
+Traceback (most recent call last):
+  File "/root/mdlm/main.py", line 209, in main
+    _train(config, logger, tokenizer)
+  File "/root/mdlm/main.py", line 180, in _train
+    _print_batch(train_ds, valid_ds, tokenizer)
+  File "/root/miniconda3/lib/python3.12/site-packages/lightning_utilities/core/rank_zero.py", line 42, in wrapped_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/root/mdlm/main.py", line 76, in _print_batch
+    batch = next(iter(dl))
+                 ^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/utils/data/dataloader.py", line 493, in __iter__
+    return self._get_iterator()
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/utils/data/dataloader.py", line 424, in _get_iterator
+    return _MultiProcessingDataLoaderIter(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/site-packages/torch/utils/data/dataloader.py", line 1171, in __init__
+    w.start()
+  File "/root/miniconda3/lib/python3.12/multiprocessing/process.py", line 121, in start
+    self._popen = self._Popen(self)
+                  ^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/multiprocessing/context.py", line 224, in _Popen
+    return _default_context.get_context().Process._Popen(process_obj)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/multiprocessing/context.py", line 282, in _Popen
+    return Popen(process_obj)
+           ^^^^^^^^^^^^^^^^^^
+  File "/root/miniconda3/lib/python3.12/multiprocessing/popen_fork.py", line 19, in __init__
+    self._launch(process_obj)
+  File "/root/miniconda3/lib/python3.12/multiprocessing/popen_fork.py", line 65, in _launch
+    child_r, parent_w = os.pipe()
+                        ^^^^^^^^^
+OSError: [Errno 24] Too many open files
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+===== TEXT8 TRAINING DONE at Mon May 25 18:30:25 CST 2026 =====
+EXIT CODE: 1
+DONE at Mon May 25 18:42:50 CST 2026
