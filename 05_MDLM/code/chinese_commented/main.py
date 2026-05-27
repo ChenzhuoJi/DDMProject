@@ -148,7 +148,7 @@ def generate_samples(config, logger, tokenizer):
           num_steps=config.sampling.steps, ret_snapshots=True)
         model.display_snapshots(snapshots, max_length=100)
         save_path = config.sampling.get('visualize_save_path', 'snapshots.txt')
-        model.save_snapshots_to_file(snapshots, save_path, max_length=200)
+        model.save_snapshots_to_file(snapshots, save_path, max_length=0)
         print(f'快照已保存到 {save_path}')
       else:
         # 标准采样分支

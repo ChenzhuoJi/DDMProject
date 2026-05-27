@@ -796,7 +796,11 @@ class Diffusion(L.LightningModule):
     snapshots = []
     if ret_snapshots:
       # 在低 t 区域加密采样，因为大部分去噪发生在后期
-      snapshot_t_values = [0.5, 0.4, 0.3, 0.2, 0.15, 0.1, 0.08, 0.06, 0.04, 0.02, 0.01, 0.005, 0.0]
+      snapshot_t_values = [
+        0.95, 0.90, 0.85, 0.80, 0.75, 0.70, 0.65, 0.60, 0.55,  # 潜伏期（新增）
+        0.50, 0.45, 0.40, 0.35, 0.30, 0.25, 0.20,               # 主去噪期（加密）
+        0.15, 0.12, 0.10, 0.08, 0.06, 0.04, 0.02, 0.01, 0.005, 0.0  # 微调期（保持）
+      ]
       snapshots.append((1.0, x.clone().cpu()))  # 记录初始状态
       snap_idx = 0
 
@@ -911,7 +915,7 @@ class Diffusion(L.LightningModule):
         segments.append(self.tokenizer.decode(buf))
       text = ' '.join(s for s in segments if s)
       text = ' '.join(text.split())
-      if len(text) > max_length:
+      if max_length > 0 and len(text) > max_length:
         text = text[:max_length] + '...'
       lines.append((t_val, text))
     return lines
@@ -943,7 +947,7 @@ class Diffusion(L.LightningModule):
       print(f't={t_val:.3f} ({pct:3.0f}% 完成): {text}')
     print('=' * 70)
 
-  def save_snapshots_to_file(self, snapshots, filepath, max_length=200):
+  def save_snapshots_to_file(self, snapshots, filepath, max_length=0):
     """
     将快照可视化保存到文本文件。
 
