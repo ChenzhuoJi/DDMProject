@@ -21,3 +21,11 @@ venv/
 研究报告大纲.md
 reference.bib
 tex/
+
+# 05_MDLM 实验产物（不提交）
+05_MDLM/experiments/docs/figures/
+05_MDLM/experiments/snapshots/csv/
+05_MDLM/experiments/text8/checkpoint/
+05_MDLM/notebooks/
+05_MDLM/**/*.zip
+05_MDLM/**/*.csv
