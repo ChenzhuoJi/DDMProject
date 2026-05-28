@@ -1,0 +1,213 @@
+diff --git a/configs/config.yaml b/configs/config.yaml
+index 30e056c..cc76d4b 100644
+--- a/configs/config.yaml
++++ b/configs/config.yaml
+@@ -36,6 +36,7 @@ sampling:
+   semi_ar: False
+   stride_length: 1
+   num_strides: 1
++  visualize: False  # If True, print progressive unmasking snapshots during sampling
+ 
+ training:
+   ema: 0.9999
+diff --git a/diffusion.py b/diffusion.py
+index 9442f02..ba693fc 100644
+--- a/diffusion.py
++++ b/diffusion.py
+@@ -654,11 +654,29 @@ class Diffusion(L.LightningModule):
+       x[:, i + 1] = y
+     return x
+ 
++  def _check_snapshot(self, t_val, snapshot_t_values, snap_idx):
++    if snap_idx >= len(snapshot_t_values):
++      return False
++    # snapshot when t crosses below the target value
++    return t_val <= snapshot_t_values[snap_idx]
++
+   @torch.no_grad()
+-  def _sample(self, num_steps=None, eps=1e-5):
+-    """Generate samples from the model."""
++  def _sample(self, num_steps=None, eps=1e-5, ret_snapshots=False):
++    """Generate samples from the model.
++
++    Args:
++      num_steps: Number of sampling steps.
++      eps: Small epsilon for numerical stability.
++      ret_snapshots: If True, also return intermediate states
++                     as a list of (t_val, tokens_cpu).
++
++    Returns:
++      Token ids tensor, or (token_ids, snapshots) if ret_snapshots=True.
++    """
+     batch_size_per_gpu = self.config.loader.eval_batch_size
+     if self.parameterization == 'ar':
++      if ret_snapshots:
++        return self._ar_sampler(batch_size_per_gpu), []
+       return self._ar_sampler(batch_size_per_gpu)
+     # Lightning auto-casting is not working in this method for some reason
+     if num_steps is None:
+@@ -671,8 +689,15 @@ class Diffusion(L.LightningModule):
+     dt = (1 - eps) / num_steps
+     p_x0_cache = None
+ 
++    snapshots = []
++    if ret_snapshots:
++      snapshot_t_values = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.0]
++      snapshots.append((1.0, x.clone().cpu()))
++      snap_idx = 0
++
+     for i in range(num_steps):
+-      t = timesteps[i] * torch.ones(
++      t_val = timesteps[i].item()
++      t = t_val * torch.ones(
+         x.shape[0], 1, device=self.device)
+       if self.sampler == 'ddpm':
+         x = self._ddpm_update(x, t, dt)
+@@ -687,6 +712,10 @@ class Diffusion(L.LightningModule):
+       else:
+         x = self._analytic_update(x, t, dt)
+ 
++      if ret_snapshots and self._check_snapshot(t_val, snapshot_t_values, snap_idx):
++        snapshots.append((t_val, x.clone().cpu()))
++        snap_idx += 1
++
+     if self.config.sampling.noise_removal:
+       t = timesteps[-1] * torch.ones(x.shape[0], 1,
+                                      device=self.device)
+@@ -695,10 +724,23 @@ class Diffusion(L.LightningModule):
+       else:
+         unet_conditioning = self.noise(t)[0]
+         x = self.forward(x, unet_conditioning).argmax(dim=-1)
++
++    if ret_snapshots:
++      snapshots.append((0.0, x.clone().cpu()))
++      return x, snapshots
+     return x
+ 
+-  def restore_model_and_sample(self, num_steps, eps=1e-5):
+-    """Generate samples from the model."""
++  def restore_model_and_sample(self, num_steps, eps=1e-5, ret_snapshots=False):
++    """Generate samples from the model.
++
++    Args:
++      num_steps: Number of sampling steps.
++      eps: Small epsilon for numerical stability.
++      ret_snapshots: If True, also return intermediate states.
++
++    Returns:
++      Token ids tensor, or (token_ids, snapshots) if ret_snapshots=True.
++    """
+     # Lightning auto-casting is not working in this method for some reason
+     if self.ema:
+       self.ema.store(itertools.chain(
+@@ -709,14 +751,85 @@ class Diffusion(L.LightningModule):
+         self.noise.parameters()))
+     self.backbone.eval()
+     self.noise.eval()
+-    samples = self._sample(num_steps=num_steps, eps=eps)
++    result = self._sample(num_steps=num_steps, eps=eps, ret_snapshots=ret_snapshots)
+     if self.ema:
+       self.ema.restore(itertools.chain(
+         self.backbone.parameters(),
+         self.noise.parameters()))
+     self.backbone.train()
+     self.noise.train()
+-    return samples
++    return result
++
++  def snapshots_to_text(self, snapshots, max_length=80):
++    """Convert snapshots from _sample(..., ret_snapshots=True) to readable text.
++
++    Splits token sequence into consecutive runs of normal / mask tokens,
++    decodes normal runs properly (handles BPE subword spacing), and
++    inserts [MASK] markers at mask positions.
++
++    Args:
++      snapshots: List of (t_val, tokens_cpu) pairs.
++      max_length: Max number of characters per line.
++
++    Returns:
++      List of (t_val, text) strings for display.
++    """
++    lines = []
++    for t_val, tokens in snapshots:
++      ids = tokens[0].tolist()  # first sample in batch
++      segments = []
++      buf = []
++      for tid in ids:
++        if tid == self.mask_index:
++          if buf:
++            segments.append(self.tokenizer.decode(buf))
++            buf = []
++          segments.append('[MASK]')
++        else:
++          buf.append(tid)
++      if buf:
++        segments.append(self.tokenizer.decode(buf))
++      text = ' '.join(s for s in segments if s)
++      # Clean up extra spaces
++      text = ' '.join(text.split())
++      if len(text) > max_length:
++        text = text[:max_length] + '...'
++      lines.append((t_val, text))
++    return lines
++
++  def display_snapshots(self, snapshots, max_length=80):
++    """Print a progressive visualization of the diffusion reverse process.
++
++    Args:
++      snapshots: List of (t_val, tokens_cpu) pairs from _sample().
++      max_length: Max characters per line.
++    """
++    lines = self.snapshots_to_text(snapshots, max_length)
++    print('=' * 70)
++    print('Diffusion Reverse Process (t=1.0 → t=0.0)')
++    print('=' * 70)
++    for t_val, text in lines:
++      pct = (1 - t_val) * 100
++      print(f't={t_val:.3f} ({pct:3.0f}% done): {text}')
++    print('=' * 70)
++
++  def save_snapshots_to_file(self, snapshots, filepath, max_length=200):
++    """Save snapshot visualization to a text file.
++
++    Args:
++      snapshots: List of (t_val, tokens_cpu) pairs from _sample().
++      filepath: Path to output text file.
++      max_length: Max characters per line.
++    """
++    lines = self.snapshots_to_text(snapshots, max_length)
++    with open(filepath, 'w') as f:
++      f.write('=' * 70 + '\n')
++      f.write('Diffusion Reverse Process (t=1.0 → t=0.0)\n')
++      f.write('=' * 70 + '\n')
++      for t_val, text in lines:
++        pct = (1 - t_val) * 100
++        f.write(f't={t_val:.3f} ({pct:3.0f}% done): {text}\n')
++      f.write('=' * 70 + '\n')
+ 
+   def get_score(self, x, sigma):
+     model_output = self.forward(x, sigma)
+diff --git a/main.py b/main.py
+index 51dd2d7..8d0f4a6 100644
+--- a/main.py
++++ b/main.py
+@@ -106,8 +106,16 @@ def generate_samples(config, logger, tokenizer):
+       # and diffusion.compute_generative_perplexity() discards
+       # any text after the first EOS token.
+     else:
+-      samples = model.restore_model_and_sample(
+-        num_steps=config.sampling.steps)
++      if config.sampling.visualize:
++        samples, snapshots = model.restore_model_and_sample(
++          num_steps=config.sampling.steps, ret_snapshots=True)
++        model.display_snapshots(snapshots, max_length=100)
++        save_path = config.sampling.get('visualize_save_path', 'snapshots.txt')
++        model.save_snapshots_to_file(snapshots, save_path, max_length=200)
++        print(f'Snapshots saved to {save_path}')
++      else:
++        samples = model.restore_model_and_sample(
++          num_steps=config.sampling.steps)
+       text_samples = model.tokenizer.batch_decode(samples)
+       model.compute_generative_perplexity(text_samples)
+   print('Text samples:', text_samples)

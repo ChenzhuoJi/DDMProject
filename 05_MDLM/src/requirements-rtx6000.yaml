@@ -1,0 +1,49 @@
+name: mdlm
+channels:
+  - pytorch
+  - anaconda
+  - nvidia
+  - defaults
+dependencies:
+  - pip=24.0
+  - python=3.12
+  - pip:
+      # PyTorch 2.7.0 + CUDA 12.8 已预装在容器中，无需在此安装
+      # 运行前确认: python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+
+      # 核心框架
+      - lightning>=2.5.0          # PyTorch 2.7 兼容
+      - hydra-core==1.3.2
+      - omegaconf==2.3.0
+      - transformers>=4.45.0      # Python 3.12 wheel
+      - datasets==2.18.0
+
+      # 工具库
+      - einops==0.7.0
+      - fsspec==2024.2.0
+      - packaging==23.2
+      - rich==13.7.1
+      - h5py==3.10.0
+      - pandas==2.2.1
+      - scikit-learn==1.4.0
+      - seaborn==0.13.2
+      - ipdb==0.13.13
+      - nvitop==1.3.2
+      - timm==0.9.16
+      - git-lfs==1.6
+
+      # 日志
+      - wandb>=0.18.0             # Python 3.12 兼容
+
+      # 笔记本（可选）
+      - jupyter>=1.0.0
+      - notebook>=7.1.1
+
+      # flash-attn：Blackwell + CUDA 12.8 用最新版编译
+      - flash-attn>=2.7.0         # pip 安装时自动从源码编译
+
+      # Mamba SSM（可选，不使用可跳过）
+      # - causal-conv1d>=1.2.0     # CUDA 12.8 兼容版
+      # - mamba-ssm>=2.0.0         # 同上
+
+      # 注意：triton 由 PyTorch 2.7 内置，无需单独安装
