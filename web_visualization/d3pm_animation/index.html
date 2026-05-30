@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>D3PM - Discrete Diffusion Visualization</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app" data-phase="intro">
+    <!-- Ambient background canvas -->
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- Top bar -->
+    <header id="top-bar">
+      <div class="brand-group">
+        <span class="brand-mark">D3PM</span>
+        <span class="brand-divider"></span>
+        <span class="brand-sub">Discrete Denoising Diffusion</span>
+      </div>
+      <div class="status-group">
+        <span class="phase-badge" id="phase-badge">FORWARD</span>
+        <span class="step-label" id="step-label">t = <span class="mono" id="t-display">0</span> / <span class="mono" id="t-total">8</span></span>
+      </div>
+    </header>
+
+    <!-- Narrative bar -->
+    <div id="narrative-bar">
+      <div class="narrative-icon">💬</div>
+      <div class="narrative-text" id="narrative-text">
+        我是阵列左上角那颗红色像素。此刻世界清晰分明——我知道我是谁。但噪声正在远处酝酿……
+      </div>
+    </div>
+
+    <!-- Main canvas area -->
+    <main id="main-area">
+      <!-- Left: Pixel Grid -->
+      <section id="pixel-section" class="section-panel">
+        <div class="section-header">
+          <span class="section-title">PIXEL ARRAY</span>
+          <span class="section-badge" id="grid-badge">4×4</span>
+        </div>
+        <div id="pixel-grid-container">
+          <div id="pixel-grid"></div>
+        </div>
+        <div id="pixel-info">
+          <span class="pixel-coord" id="pixel-coord">聚焦 (0,0)</span>
+          <span class="pixel-state" id="pixel-state-label">状态 <span class="mono" id="pixel-state-id">0</span></span>
+        </div>
+      </section>
+
+      <!-- Center: State Radiation -->
+      <section id="state-section" class="section-panel">
+        <div class="section-header">
+          <span class="section-title">STATE TRANSITION</span>
+          <span class="section-badge" id="transition-badge">K=10</span>
+        </div>
+        <div id="state-graph-container">
+          <svg id="state-graph" viewBox="-220 -220 440 440"></svg>
+          <div id="center-state-indicator">
+            <div class="center-state-dot" id="center-state-dot"></div>
+            <span class="center-state-label" id="center-state-label">s=0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Info Panel -->
+      <section id="info-section" class="section-panel">
+        <div class="section-header">
+          <span class="section-title">PARAMETERS</span>
+        </div>
+        <div id="info-content">
+          <div class="info-row">
+            <span class="info-key">Time Step</span>
+            <span class="info-val mono" id="info-t">0</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Noise β</span>
+            <span class="info-val mono" id="info-beta">0.010</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Current State</span>
+            <span class="info-val" id="info-state">
+              <span class="state-dot-sm" id="info-state-dot"></span>
+              <span class="mono" id="info-state-id">0</span>
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Next State</span>
+            <span class="info-val" id="info-next-state">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Entropy H</span>
+            <span class="info-val mono" id="info-entropy">0.000</span>
+          </div>
+          <div class="info-divider"></div>
+          <div class="info-row info-row-small">
+            <span class="info-key">Direction</span>
+            <span class="info-val" id="info-direction">
+              <span class="direction-arrow" id="direction-arrow">→</span>
+              <span id="direction-label">Noising</span>
+            </span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Probability Spectrometer -->
+    <section id="spectrometer-section">
+      <div class="section-header spectrometer-header">
+        <span class="section-title">TRANSITION PROBABILITY DISTRIBUTION</span>
+        <span class="section-badge" id="spectrometer-badge">row of Q<sub>t</sub></span>
+      </div>
+      <div id="spectrometer"></div>
+    </section>
+
+    <!-- Timeline -->
+    <section id="timeline-section">
+      <div id="timeline">
+        <div class="timeline-track" id="timeline-track"></div>
+        <div class="timeline-label">
+          <span>t=0</span>
+          <span>t=T</span>
+        </div>
+      </div>
+      <div class="timeline-info">
+        <span class="timeline-phase" id="timeline-phase">FORWARD</span>
+      </div>
+    </section>
+
+    <!-- Controls -->
+    <footer id="controls-bar">
+      <div class="controls-group">
+        <button class="ctrl-btn" id="btn-reset" title="Reset">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 0 1 10.47-4M14 8a6 6 0 0 1-10.47 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 1.5V5H9.5M3 14.5V11h3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ctrl-btn" id="btn-skip-back" title="Skip to start">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M11 3L5 8l6 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 3v10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+        <button class="ctrl-btn ctrl-btn-main" id="btn-play" title="Play">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M6 3.5v13l11-6.5L6 3.5z" fill="currentColor"/></svg>
+        </button>
+        <button class="ctrl-btn" id="btn-skip-fwd" title="Skip to end">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5 3l6 5-6 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3v10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </button>
+        <button class="ctrl-btn" id="btn-loop" title="Toggle loop">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M13 5a5 5 0 0 0-9-2M3 11a5 5 0 0 0 9 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 1.5V5h-3.5M3 14.5V11h3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="controls-group speed-group">
+        <label class="speed-label">SPEED</label>
+        <div class="speed-options" id="speed-options">
+          <button class="speed-btn" data-speed="0.5">0.5×</button>
+          <button class="speed-btn active" data-speed="1">1×</button>
+          <button class="speed-btn" data-speed="2">2×</button>
+          <button class="speed-btn" data-speed="3">3×</button>
+        </div>
+      </div>
+      <div class="controls-group">
+        <button class="ctrl-btn ctrl-btn-mode" id="btn-toggle-mode" title="Toggle direction">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M8 14l4-4M8 14l-4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </footer>
+
+    <!-- Scene transition overlay -->
+    <div id="scene-overlay"></div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/pixel-grid.js"></script>
+  <script src="js/state-graph.js"></script>
+  <script src="js/spectrometer.js"></script>
+  <script src="js/timeline.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
