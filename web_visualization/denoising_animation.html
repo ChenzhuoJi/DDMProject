@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MDLM · 去噪过程</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #f3f0ec;
+    font-family: 'Inter', 'SF Pro', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    color: #1e1b17;
+  }
+
+  .container {
+    background: #faf8f6;
+    max-width: 1040px;
+    width: 100%;
+    padding: 32px 36px 28px;
+    border: 1px solid #e2ddd6;
+  }
+
+  /* ── Header ── */
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 28px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #e2ddd6;
+  }
+
+  .header h1 {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    color: #1e1b17;
+    text-transform: uppercase;
+  }
+
+  .header-meta {
+    text-align: right;
+    font-size: 11px;
+    color: #7d766e;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+    line-height: 1.6;
+  }
+
+  .subtitle {
+    font-size: 11px;
+    color: #7d766e;
+    margin-top: 3px;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  }
+
+  /* ── Phase Timeline ── */
+
+  .timeline {
+    margin-bottom: 16px;
+  }
+
+  .phase-track {
+    display: flex;
+    height: 3px;
+    background: #e2ddd6;
+    margin-bottom: 5px;
+  }
+
+  .phase-segment {
+    flex: 1;
+    height: 100%;
+    opacity: 0.15;
+    transition: opacity 0.35s;
+  }
+
+  .phase-segment.s0 { background: #3d7068; }
+  .phase-segment.s1 { background: #b64f35; }
+  .phase-segment.s2 { background: #7a8045; }
+  .phase-segment.active { opacity: 1; }
+
+  .phase-labels {
+    display: flex;
+  }
+
+  .phase-label {
+    flex: 1;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #b5aea4;
+    transition: color 0.3s;
+  }
+
+  .phase-label:nth-child(1) { text-align: left; }
+  .phase-label:nth-child(2) { text-align: center; }
+  .phase-label:nth-child(3) { text-align: right; }
+  .phase-label.active { color: #1e1b17; font-weight: 700; letter-spacing: 0.02em; }
+
+  /* ── Progress ── */
+
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 2px;
+    background: #e2ddd6;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: #1e1b17;
+    transition: width 0.1s;
+  }
+
+  .time-label {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+    color: #7d766e;
+    min-width: 120px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* ── Token Grid ── */
+
+  @keyframes fadeReveal {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  @keyframes gridSettle {
+    0% { border-color: #b64f35; box-shadow: inset 0 0 0 1px rgba(182,79,53,0.08); }
+    40% { border-color: #b64f35; box-shadow: inset 0 0 0 1px rgba(182,79,53,0.15); }
+    100% { border-color: #d4cdc3; box-shadow: none; }
+  }
+
+  .token-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px;
+    padding: 12px 14px;
+    background: #f7f5f2;
+    border: 1px solid #e2ddd6;
+    min-height: 44px;
+    align-content: flex-start;
+    margin-bottom: 18px;
+  }
+
+  .token-grid.settled {
+    position: relative;
+    gap: 0 4px;
+    padding: 16px 20px;
+    animation: gridSettle 0.7s ease-out;
+    border-color: #d4cdc3;
+  }
+
+  .token-grid.settled .token.revealed {
+    animation: none;
+    opacity: 0 !important;
+    transition: opacity 0.3s ease;
+  }
+
+  .token-grid .settle-text {
+    position: absolute;
+    top: 16px;
+    left: 20px;
+    right: 20px;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.6;
+    color: #1e1b17;
+    opacity: 0;
+    transition: opacity 0.45s ease;
+    pointer-events: none;
+    word-wrap: break-word;
+  }
+
+  .token-grid .settle-text.visible {
+    opacity: 1;
+  }
+
+  .token {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    height: 22px;
+    padding: 0 3px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+    color: #1e1b17;
+  }
+
+  .token.mask {
+    color: #e2dbd0;
+  }
+
+  .token.revealed {
+    color: #1e1b17;
+    animation: fadeReveal 0.32s ease-out;
+  }
+
+  /* ── Controls ── */
+
+  .controls-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 14px;
+  }
+
+  .controls-bar button {
+    background: transparent;
+    border: 1px solid #ddd7cf;
+    padding: 6px 11px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    color: #7d766e;
+    font-family: inherit;
+    letter-spacing: 0.01em;
+    line-height: 1;
+  }
+
+  .controls-bar button:hover {
+    color: #1e1b17;
+    border-color: #1e1b17;
+    background: transparent;
+  }
+
+  .controls-bar button:active {
+    opacity: 0.6;
+  }
+
+  .controls-bar button.primary {
+    background: #1e1b17;
+    border-color: #1e1b17;
+    color: #faf8f6;
+    font-weight: 500;
+  }
+
+  .controls-bar button.primary:hover {
+    background: #3a3530;
+    border-color: #3a3530;
+    color: #faf8f6;
+  }
+
+  .controls-bar button.primary.playing {
+    background: transparent;
+    border-color: #b64f35;
+    color: #b64f35;
+  }
+
+  .controls-bar button.primary.playing:hover {
+    background: rgba(182, 79, 53, 0.06);
+  }
+
+  .speed-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .speed-group label {
+    font-size: 10px;
+    color: #a39c94;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+  }
+
+  .speed-group input[type="range"] {
+    width: 64px;
+    height: 2px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #e2ddd6;
+    outline: none;
+  }
+
+  .speed-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 8px;
+    height: 8px;
+    background: #1e1b17;
+    cursor: pointer;
+    border: none;
+  }
+
+  .speed-group input[type="range"]::-moz-range-thumb {
+    width: 8px;
+    height: 8px;
+    background: #1e1b17;
+    cursor: pointer;
+    border: none;
+  }
+
+  .speed-value {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+    color: #7d766e;
+    min-width: 20px;
+    text-align: center;
+  }
+
+  /* ── Stats ── */
+
+  .stats {
+    display: flex;
+    gap: 20px;
+  }
+
+  .stat-item {
+    font-size: 10px;
+    color: #a39c94;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  }
+
+  .stat-item em {
+    font-style: normal;
+    color: #7d766e;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header class="header">
+    <div>
+      <h1>MDLM · 去噪过程</h1>
+      <div class="subtitle" id="subtitle">seed 42 · 1000步 · ddpm_cache</div>
+    </div>
+      <div class="header-meta">
+        <span id="snapshotCount">27 snapshots</span>
+        <span id="currentFile" style="display:block;font-size:10px;color:#b5aea4;margin-top:2px;"></span>
+      </div>
+  </header>
+
+  <div class="timeline">
+    <div class="phase-track">
+      <div class="phase-segment s0" id="phaseSeg0"></div>
+      <div class="phase-segment s1" id="phaseSeg1"></div>
+      <div class="phase-segment s2" id="phaseSeg2"></div>
+    </div>
+    <div class="phase-labels">
+      <div class="phase-label" id="phaseLabel0">Latent</div>
+      <div class="phase-label" id="phaseLabel1">Main</div>
+      <div class="phase-label" id="phaseLabel2">Fine-tune</div>
+    </div>
+  </div>
+
+  <div class="progress-row">
+    <div class="progress-track" id="progressTrack">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="time-label" id="timeLabel">t = 1.000 &nbsp;·&nbsp; 0%</div>
+  </div>
+
+  <div class="token-grid" id="tokenGrid"></div>
+
+  <div class="controls-bar">
+    <button id="btnPlay" class="primary">▶ Play</button>
+    <button id="btnPrev">◀ Prev</button>
+    <button id="btnNext">Next ▶</button>
+    <button id="btnReset">↺ Reset</button>
+    <button id="btnLoadFile" title="加载快照文件">📂</button>
+    <input type="file" id="fileInput" accept=".txt" hidden>
+    <div class="speed-group">
+      <label>Speed</label>
+      <input type="range" id="speedSlider" min="1" max="10" value="1">
+      <span class="speed-value" id="speedLabel">1×</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <span class="stat-item">Step <em id="statStep">0 / 13</em></span>
+    <span class="stat-item">[MASK] <em id="statMask">--</em></span>
+    <span class="stat-item">Determined <em id="statRevealed">--</em></span>
+  </div>
+</div>
+
+<script>
+const SNAPSHOT_DATA = [{"t": 1.0, "pct": 0.0, "tokens": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null]}, {"t": 0.949, "pct": 5.1, "tokens": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, ",", null, null, null, null, null, null, null, null, null, null, null, null, "12", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "projections", null, null, null, null, null, null, null, null, "fifth", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "5", null, null, null, null, null, null, null, "regular", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "seasons", null, null, "]", null, null, null, "2018", null, null, null, null, null, null, null, null, null, null, null, null, ",", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "Cardinals", null, null, null, null, null, null, null, null, "86", null, null, null, null, ",", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "116", "(", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "6", null, null, null, null, null, null, null, null, null, null, null, null, null]}, {"t": 0.899, "pct": 10.1, "tokens": [null, null, null, null, null, null, null, null, null, null, null, null, null, null, ",", null, null, null, null, null, null, null, null, null, null, null, "12", null, null, null, "preseason", null, null, null, "announced", null, null, null, null, null, null, null, "projections", null, null, null, null, null, null, null, null, "fifth", null, null, null, null, null, null, null, null, null, null, "stadium", null, null, null, null, null, null, null, null, null, "'s", null, null, "that", null, null, null, null, null, null, null, null, null, null, null, "5", null, null, null, null, null, null, null, "regular", null, null, null, null, null, null, "4", null, null, null, null, null, null, null, null, null, "previous", "seasons", null, null, "]", null, null, null, "2018", null, null, null, null, null, null, null, null, null, null, null, null, ",", null, null, null, null, null, null, null, null, null, null, null, "0", null, null, null, null, null, null, null, null, null, null, null, "Cardinals", null, null, null, null, null, null, null, null, "86", null, null, null, null, ",", null, null, ".", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "9", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, "116", "(", null, null, "13", null, null, null, null, "(", null, null, null, null, null, null, null, "6", null, null, null, null, null, null, null, null, null, null, null, null, null]}, {"t": 0.849, "pct": 15.1, "tokens": [null, null, null, "$", null, null, null, null, null, null, null, null, "$", null, ",", null, null, null, null, null, null, null, null, null, null, "the", "12", null, null, null, "preseason", null, null, null, "announced", null, "new", null, null, null, null, "quarter", "projections", null, null, null, null, "at", null, null, null, "fifth", null, "season", null, null, null, null, null, null, null, null, "stadium", null, null, null, null, null, null, null, null, null, "'s", null, null, "that", null, null, null, null, null, null, null, "went", null, null, null, "5", null, null, null, null, null, "%", null, "regular", null, null, ",", "up", null, null, "4", null, "5", "percent", null, null, null, null, null, null, "previous", "seasons", null, null, "]", null, null, null, "2018", null, null, null, null, null, null, null, null, null, null, ")", null, ",", null, null, null, null, "3", null, null, "1", null, null, null, "0", null, null, null, null, null, null, null, null, null, null, null, "Cardinals", null, null, null, null, null, null, null, null, "86", null, "5", null, null, ",", null, null, ".1", null, null, null, null, null, null, null, null, null, null, null, null, null, null, "9", null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, ")", null, null, null, null, null, null, null, null, null, "116", "(", null, null, "13", null, null, null, null, "(", null, null, null, ")", null, null, null, "6", null, null, null, "19", null, "61", null, null, null, null, null, null, null]}, {"t": 0.799, "pct": 20.1, "tokens": [null, null, null, "$", null, null, null, null, null, null, null, null, "$", null, ",", null, null, null, null, null, null, null, "On", null, null, "the", "12", null, null, null, "preseason", null, null, "ESPN", "announced", null, "new", null, null, null, null, "quarter", "projections", null, null, null, null, "at", null, null, null, "fifth", null, "season", null, null, null, null, null, null, null, null, "stadium", null, null, null, null, null, null, null, null, null, "'s", "analysts", null, "that", null, null, null, null, null, null, null, "went", null, null, null, "5", null, null, null, null, null, "%", null, "regular", null, null, ",", "up", null, null, "4", null, "5", "percent", null, null, null, null, null, null, "previous", "seasons.[", null, "]", null, null, null, "2018", null, null, null, null, null, null, null, null, null, null, ")", null, ",", null, null, null, null, "3", null, "071", null, null, null, "0", "3", null, null, null, null, null, null, null, null, "–", null, "Cardinals", null, null, null, null, null, null, null, null, "86", null, "5", null, null, ",", null, null, ".1", null, null, null, null, null, null, null, null, null, null, null, null, null, null, "9", null, null, null, null, null, null, "]", null, null, null, null, null, null, null, null, null, null, null, null, null, null, ")", null, null, null, null, null, null, null, null, null, "116", "(", null, null, "13", null, null, null, null, "(", null, null, null, ")", null, null, null, "6–", null, null, "19", null, "61", null, null, null, null, ")", null, null]}, {"t": 0.749, "pct": 25.1, "tokens": [null, null, null, "$", null, null, null, null, null, null, null, null, "$", null, ",", null, null, null, null, "49", null, null, "On", null, null, "the", "12", null, null, null, "preseason", null, null, "ESPN", "announced", null, "new", null, null, null, null, "quarter", "projections", null, null, null, "Field", "at", null, null, null, "fifth", null, "season", null, null, null, null, null, null, null, null, "stadium", null, null, null, null, null, null, null, null, null, "'s", "analysts", null, "that", null, null, null, null, null, null, null, "went", null, null, null, "5", null, "/", null, null, null, "%", null, "regular", null, null, ",", "up", null, null, "4", null, "5", "percent", null, null, null, null, null, null, "previous", "seasons.[", null, "]", null, null, null, "2018", null, null, null, null, null, null, null, null, null, null, ")", null, ",", null, null, null, null, "3", null, "071", null, null, null, "0", "3", null, null, null, null, null, null, null, null, "–", null, "Cardinals", null, null, null, null, null, null, null, null, "86", null, "5", null, null, ",", null, null, ".1", "4", null, null, null, null, null, null, null, null, null, null, null, null, null, "9", null, null, null, null, null, null, "]", null, null, null, null, null, null, "Division", null, null, null, null, null, null, null, ")", null, null, null, null, null, null, null, null, null, "116", "(", null, null, "13", null, null, null, null, "(", null, null, null, ")", null, null, null, "6–", null, null, "19", "25", "61", null, null, null, null, ")", null, null]}, {"t": 0.699, "pct": 30.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, null, null, null, null, null, null, null, "$", null, ",", null, null, null, null, "49", null, null, "On", null, null, "the", "12", null, null, null, "preseason", null, null, "ESPN", "announced", null, "new", null, null, null, null, "quarter", "projections", null, null, null, "Field", "at", null, null, null, "fifth", null, "season", null, null, null, null, null, null, null, null, "stadium", null, null, null, null, null, null, null, null, null, "'s", "analysts", null, "that", null, null, null, null, null, null, null, "went", null, null, null, "5", null, "/", null, null, null, "%", null, "regular", null, null, ",", "up", null, null, "4", null, "5", "percent", null, null, null, null, null, null, "previous", "seasons.[", null, "]", null, "Season", null, "2018", null, null, null, null, null, null, null, null, null, null, ")", null, ",", null, null, null, null, "3", null, "071", null, "7.0", "3", null, null, null, null, null, null, null, null, "–", null, "Cardinals", null, null, null, null, null, null, null, null, "86", null, "5", null, null, ",", null, null, ".1", "4", null, "303", null, null, "2", "5", null, null, null, null, null, null, null, "9", null, null, null, null, null, null, "]", null, null, null, null, "West", "Division", null, "9", null, null, null, null, null, ")", null, null, null, null, null, null, null, null, null, "116", "(", null, null, "13", null, null, null, null, "(", null, null, null, ")", null, null, null, "6–", null, null, "19", "25", "61", null, null, null, null, ")", null, null]}, {"t": 0.649, "pct": 35.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, null, null, null, null, null, null, null, "$337,", null, null, null, null, "49", null, null, "On", null, null, "the", "12th", null, null, "preseason", null, null, "ESPN", "announced", null, "new", null, null, null, null, "quarter", "projections", null, null, null, "Field", "at", "Arizona", null, null, "fifth", null, "season", null, null, null, null, "'s", null, "-", null, "stadium", null, null, null, null, null, null, null, null, "ESPN's", "analysts", null, "that", null, null, null, null, null, null, null, "went", null, null, "reach", "5", null, "/", null, null, null, "%", null, "regular", null, null, ",", "up", null, null, "4", null, "5", "percent", null, null, null, null, null, null, "previous", "seasons.[", null, "]", null, "Season", null, "2018", null, null, null, null, null, null, null, null, null, null, ")", null, ",", null, null, null, null, "3", null, "071", null, "7.0", "3", null, null, null, null, null, null, null, null, "–", null, "Cardinals", null, null, null, null, null, null, null, null, "86", null, "5", null, null, ",", null, null, ".1", "4", null, "303", null, null, "2", "5", null, null, null, null, null, null, null, "9", null, null, null, null, "[51]", null, null, null, null, "West", "Division", null, "9", null, null, "1", null, null, ")", null, null, null, null, null, null, null, "14", null, "116", "(", null, null, "13", null, null, null, null, "(", null, null, null, ")", null, "25", null, "6–", null, null, "19", "25", "61", null, null, null, null, ")", null, null]}, {"t": 0.599, "pct": 40.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, null, null, null, null, null, null, null, "$337,", null, null, null, null, "49", null, null, "On", null, null, "the", "12th", "game", null, "preseason", null, null, "ESPN", "announced", null, "new", null, null, null, null, "quarter", "projections", null, null, null, "Field", "at", "Arizona", null, "next", "fifth-season", null, null, null, null, "'s", null, "-", null, "stadium", null, null, null, null, null, "'s", null, null, "ESPN's", "analysts", null, "that", null, null, null, null, null, null, null, "went", null, null, "reach", "5", null, "/", null, null, "4%", null, "regular", null, null, ",", "up", null, null, "4", null, "5", "percent", null, null, "Field", null, null, null, "previous", "seasons.[", null, "]", null, "Season", null, "2018", null, null, null, null, null, null, null, null, null, null, ")", null, ",", null, null, null, null, "3", null, "071", null, "7.0", "3", null, null, null, null, "5", null, null, null, "–", null, "Cardinals", null, null, "6", null, null, null, "0", null, "86", null, "5,", null, ",", null, null, ".1", "4", null, "303", null, null, "2", "5", null, null, null, null, null, null, "256", "9", null, null, null, null, "[51]", null, null, null, null, "West", "Division", null, "9", null, null, "1", null, "16)", null, null, null, null, null, null, null, "14", null, "116", "(", null, null, "13", null, null, null, null, "(", null, null, null, ")", "925", null, "6–", null, null, "19", "25", "61", null, null, null, null, ")", null, null]}, {"t": 0.549, "pct": 45.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, null, null, null, null, null, null, ":", "$337,", null, null, null, null, "49", null, null, "On", null, null, "the", "12th", "game", null, "preseason", null, ",", "ESPN", "announced", null, "new", null, null, null, null, "quarter", "projections", null, null, null, "Field", "at", "Arizona", null, "next", "fifth-season", null, null, null, null, "'s", "2015-", null, "stadium", null, null, null, null, null, "'s", null, ",", "ESPN's", "analysts", null, "that", null, null, null, "tickets", null, "the", null, "went", null, null, "reach", "5", null, "/", null, null, "4%", null, "regular", null, null, ",", "up", null, null, "4", null, "5", "percent", null, null, "Field", null, null, null, "previous", "seasons.[", null, "]", null, "Season", null, "2018", null, null, null, null, null, null, null, null, null, null, ")", null, ",", null, null, null, null, "3", null, "071", null, "7.0", "3", null, null, null, null, "5", null, null, null, "–", null, "Cardinals", null, null, "6", null, null, null, "0–86", null, "5,", null, ",", null, null, ".1", "4", null, "303", null, null, "2", "5", null, "028", null, null, null, null, "256", "9", null, null, null, null, "[51]", null, null, null, null, "West", "Division", "record", "9", null, "(1", null, "16)", null, null, null, null, null, null, null, "14", null, "116", "(", null, null, "13", null, null, null, null, "(11", null, null, ")", "925", null, "6–15", null, "19", "25", "61", null, null, null, null, ")", null, null]}, {"t": 0.499, "pct": 50.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, null, null, null, null, null, "2016:", "$337,", null, null, null, null, "49", null, null, "On", "Sunday", null, "the", "12th", "game", null, "preseason", null, ",", "ESPN", "announced", null, "new", null, null, null, null, "quarter", "projections", "for", null, null, "Field", "at", "Arizona", null, "next", "fifth-season", null, null, null, null, "'s", "2015-", null, "stadium", null, null, null, null, null, "'s", null, ",", "ESPN's", "analysts", "predicted", "that", null, null, null, "tickets", null, "the", null, "went", null, null, "reach", "5", null, "/", null, null, "4%", null, "regular", null, null, ",", "up", null, null, "4", null, "5", "percent", null, null, "Field", null, "to", null, "previous", "seasons.[", null, "]", null, "Season", null, "2018", null, null, null, null, null, null, null, null, null, null, ")", "2,", null, null, null, null, "3", null, "071", null, "7.0", "3", null, null, null, null, "5", null, null, "0–", null, "Cardinals", null, null, "6", null, null, null, "0–86", null, "5,", null, ",", null, null, ".1", "4", null, "303", null, ".2", "5", null, "028", null, null, null, null, "256", "9", null, null, null, null, "[51]", null, null, null, null, "West", "Division", "record", "907", "(1", null, "16)", null, null, null, null, null, null, null, "14", null, "116", "(", null, null, "13", null, null, null, null, "(11", null, "21)", "925", null, "6–15", null, "19", "25", "61", null, null, null, null, ")", null, null]}, {"t": 0.449, "pct": 55.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, null, null, null, null, null, "2016:", "$337,", null, null, null, null, "49", null, null, "On", "Sunday", null, "the", "12th", "game", "of", "preseason", null, ",", "ESPN", "announced", null, "new", null, null, null, null, "quarter", "projections", "for", "Buck", null, "Field", "at", "Arizona", null, "next", "fifth-season", null, null, null, "team's", "2015-", null, "stadium", null, null, null, null, null, "'s", null, ",", "ESPN's", "analysts", "predicted", "that", null, ",", null, "tickets", null, "the", null, "went", null, null, "reach", "5", null, "/", null, null, "4%", null, "regular", null, null, ",", "up", null, null, "4.5", "percent", null, "Chase", "Field", "compared", "to", null, "previous", "seasons.[", null, "]", null, "Season", null, "2018", null, "55", null, null, null, null, null, "2018", null, null, ")", "2,", null, null, null, null, "3", null, "071", null, "7.0", "3", null, null, null, null, "5", null, null, "0–", null, "Cardinals", null, ".6", null, null, null, "0–86", null, "5,", null, ",", null, null, ".1", "4", null, "303", "6.2", "5,028", null, null, null, null, "256", "9", null, null, null, null, "[51]", null, null, null, "record", "West", "Division", "record", "907", "(1", null, "16)", null, null, null, null, null, null, null, "14", null, "116", "(", null, null, "13", null, null, null, null, "(11", null, "21)", "925", null, "6–15", null, "19", "25", "61", null, null, null, null, ")", null, null]}, {"t": 0.399, "pct": 60.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, null, null, null, null, null, "2016:", "$337,", null, null, null, null, "49", null, null, "On", "Sunday", null, "the", "12th", "game", "of", "preseason", null, ",", "ESPN", "announced", null, "new", "set", null, null, null, "quarter", "projections", "for", "Buck", null, "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-", null, "stadium", null, null, null, null, null, "'s", null, ",", "ESPN's", "analysts", "predicted", "that", null, ",", null, "tickets", null, "the", null, "went", null, null, "reach", "5", null, "/", null, null, "4%", null, "regular", null, null, ",", "up", "1", null, "4.5", "percent", null, "Chase", "Field", "compared", "to", null, "previous", "seasons.[", null, "]", null, "Season", null, "2018", null, "55", null, null, null, "Year", null, "2018", null, null, ")", "2,", null, null, null, null, "3", null, "071", null, "7.0", "3", null, null, null, null, "5", null, null, "0–", null, "Cardinals", null, ".6", null, null, null, "0–86", null, "5,", null, ",", null, null, ".1", "4", null, "303", "6.2", "5,028", null, null, null, null, "256", "9.", null, null, null, "[51]", null, null, null, "record", "West", "Division", "record", "907", "(1", null, "16)", null, null, null, null, null, null, null, "14", null, "116", "(", null, null, "13", null, null, null, null, "(11", null, "21)", "925", null, "6–15", null, "19", "25", "61", null, null, null, "19)", null, null]}, {"t": 0.349, "pct": 65.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, null, null, "38", null, null, "2016:", "$337,", null, null, ".", null, "49", null, null, "On", "Sunday", null, "the", "12th", "game", "of", "preseason", null, ",", "ESPN", "announced", null, "new", "set", "of", null, null, "quarter", "projections", "for", "Buck", null, "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-", null, "stadium", null, null, null, null, null, "'s", null, ",", "ESPN's", "analysts", "predicted", "that", null, ",", null, "tickets", "for", "the", null, "went", null, null, "reach", "5", null, "/", null, null, "4%", null, "regular", null, null, ",", "up", "1", null, "4.5", "percent", null, "Chase", "Field", "compared", "to", null, "previous", "seasons.[50]", null, "Season", null, "2018", null, "55", null, null, null, "Year", null, "2018", null, null, ")", "2,", null, null, ",103", "3", null, "071", null, "7.0", "3", null, null, ",", null, "5", null, null, "0–", null, "Cardinals", "12.6", null, null, null, "0–86", null, "5,", null, ",", null, null, ".1", "4", null, "303", "6.2", "5,028", "6", null, null, null, "256", "9.", null, "Total", null, "[51]", null, null, "Division", "record", "West", "Division", "record", "907", "(1", null, "16)", null, null, null, null, null, null, null, "14", null, "116", "(", null, null, "13", null, null, null, null, "(11", null, "21)", "925", null, "6–15)", "19", "25", "61", null, null, null, "19)", null, null]}, {"t": 0.299, "pct": 70.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, null, "938", null, null, "2016:", "$337,", null, null, ".", null, "49", null, "On", "Sunday", null, "the", "12th", "game", "of", "preseason", null, ",", "ESPN", "announced", null, "new", "set", "of", null, null, "quarter", "projections", "for", "Buck", null, "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-2017", "stadium", null, null, null, null, null, "'s", null, ",", "ESPN's", "analysts", "predicted", "that", null, ",000", "tickets", "for", "the", null, "went", null, null, "reach", "5", "5/", null, null, "4%", null, "regular", null, null, ",", "up", "1", null, "4.5", "percent", null, "Chase", "Field", "compared", "to", null, "previous", "seasons.[50]", null, "Season", null, "2018", null, "55", null, null, null, "Year", null, "2018", null, null, ")", "2,939,103", "3", null, "071", "Cardinals", "7.0", "3", null, "767,", null, "5", null, null, "0–86", "Cardinals", "12.6", null, null, null, "0–86", null, "5,332,", null, null, ".1", "4", null, "303", "6.2", "5,028", "6", null, null, null, "256", "9.", null, "Total:[51]", null, null, "Division", "record", "West", "Division", "record", "907", "(1–16)", null, null, "(", null, "–", null, null, "14", null, "116", "(", null, null, "13", null, null, null, null, "(11", null, "21)", "925", null, "6–15)", "19", "25", "61", null, null, null, "19)", null, null]}, {"t": 0.249, "pct": 75.1, "tokens": ["<|endoftext|>", "2015", null, "$", null, ",938", null, null, "2016:", "$337,", null, null, ".", "[49", null, "On", "Sunday", null, "the", "12th", "game", "of", "preseason", null, ",", "ESPN", "announced", null, "new", "set", "of", null, "-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-2017", "stadium", "occupancy", null, null, null, null, "'s", null, ",", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", null, "went", null, "to", "reach", "5", "5/", null, null, "4%", null, "regular", null, null, ",", "up", "1", null, "4.5", "percent", null, "Chase", "Field", "compared", "to", null, "previous", "seasons.[50]", null, "Season", null, "2018", null, "55", null, "projections", null, "Year", null, "2018", null, null, ")", "2,939,103", "3,071", "Cardinals", "7.0", "3", null, "767,", null, "5", null, null, "0–86", "Cardinals", "12.6", null, null, null, "0–86", null, "5,332,708", null, ".1", "4,303", "6.2", "5,028", "6", null, null, null, "256", "9.", null, "Total:[51]", null, null, "Division", "record", "West", "Division", "record", "907", "(1–16)", null, null, "(8–", null, null, "14", null, "116", "(", null, null, "13", null, "15", null, null, "(11", null, "21)", "925", null, "6–15)", "19", "25", "61", null, null, null, "19)", null, null]}, {"t": 0.199, "pct": 80.1, "tokens": ["<|endoftext|>", "2015:", "$", null, ",938", "versus;", "2016:", "$337,", null, null, ".", "[49", null, "On", "Sunday", null, "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", null, "new", "set", "of", null, "-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-2017", "stadium", "occupancy", null, null, null, null, "'s", null, ",", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", null, "went", null, "to", "reach", "5", "5/", null, null, "4%", null, "regular", "season", "attendance,", "up", "1", null, "4.5", "percent", null, "Chase", "Field", "compared", "to", null, "previous", "seasons.[50]", "Season", null, "2018", null, "55", null, "projections", "NM", "Year", null, "2018", null, "19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,", null, "5", null, null, "0–86", "Cardinals", "12.6", null, null, null, "0–86", null, "5,332,708", null, ".1", "4,303", "6.2", "5,028", "6", null, "208", null, "256", "9.", null, "Total:[51]", null, null, "Division", "record", "West", "Division", "record", "907", "(1–16)", "9", null, "(8–10", null, "14", "20", "116", "(", null, "–13)", "15", null, null, "(11", null, "21)", "925", null, "6–15)", "19", "25", "61", "(10", null, "19)", null, null]}, {"t": 0.149, "pct": 85.1, "tokens": ["<|endoftext|>", "2015:", "$", null, ",938", "versus;", "2016:", "$337,", null, null, ".", "[49", null, "On", "Sunday", null, "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", null, "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-2017", "stadium", "occupancy", null, null, "last", null, "'s", null, ",", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", null, "went", null, "to", "reach", "5", "5/", null, null, "4%", null, "regular", "season", "attendance,", "up", "1", null, "4.5", "percent", null, "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season", null, "2018-55", null, "projections", "NM", "Year", null, "2018", null, "19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5", null, null, "0–86", "Cardinals", "12.6", null, null, null, "0–86", null, "5,332,708", null, ".1", "4,303", "6.2", "5,028", "6", null, "208", null, "256", "9.", null, "Total:[51]", "team", null, "Division", "record", "West", "Division", "record", "907", "(1–16)", "9", null, "(8–10", null, "14", "20", "116", "(", null, "–13)", "15", null, null, "(11", null, "21)", "925", null, "6–15)", "19", "25", "61", "(10", null, "19)", null, null]}, {"t": 0.119, "pct": 88.1, "tokens": ["<|endoftext|>", "2015:", "$141,938", "versus;", "2016:", "$337,", null, null, ".", "[49", null, "On", "Sunday", null, "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", null, "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-2017", "stadium", "occupancy", null, null, "last", null, "'s", null, ",", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", null, "went", null, "to", "reach", "5", "5/", null, null, "4%", null, "regular", "season", "attendance,", "up", "1/4.5", "percent", "at", "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season:", "2018-55", null, "projections", "NM", "Year", null, "2018", null, "19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5", null, "3", "0–86", "Cardinals", "12.6", null, null, null, "0–86", null, "5,332,708", "6.1", "4,303", "6.2", "5,028", "6", null, "208", null, "256", "9.", null, "Total:[51]", "team", null, "Division", "record", "West", "Division", "record", "907", "(1–16)", "911", "(8–10", null, "14", "20", "116", "(", null, "–13)", "15", null, null, "(11", null, "21)", "925", null, "6–15)", "19", "25", "61", "(10", null, "19)", null, null]}, {"t": 0.099, "pct": 90.1, "tokens": ["<|endoftext|>", "2015:", "$141,938", "versus;", "2016:", "$337,", null, null, ".", "[49", null, "On", "Sunday", "before", "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", "a", "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-2017", "stadium", "occupancy.", null, "last", "year's", "campaign,", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", null, "went", null, "to", "reach", "5", "5/", null, ".4%", null, "regular", "season", "attendance,", "up", "1/4.5", "percent", "at", "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season:", "2018-55", null, "projections", "NM", "Year", null, "2018-19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5.3", "0–86", "Cardinals", "12.6", null, null, "4", "0–86", "Cardinals", "5,332,708", "6.1", "4,303", "6.2", "5,028", "6,208,256", "9.", null, "Total:[51]", "team", "Pacific", "Division", "record", "West", "Division", "record", "907", "(1–16)", "911", "(8–10", null, "14", "20", "116", "(", null, "–13)", "15", null, null, "(11", null, "21)", "925", null, "6–15)", "19", "25", "61", "(10", null, "19)", null, "seasons"]}, {"t": 0.079, "pct": 92.1, "tokens": ["<|endoftext|>", "2015:", "$141,938", "versus;", "2016:", "$337,", null, null, ".", "[49]", "On", "Sunday", "before", "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", "a", "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-2017", "stadium", "occupancy.", "During", "last", "year's", "campaign,", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", null, "went", "on", "to", "reach", "5", "5/", null, ".4%", "of", "regular", "season", "attendance,", "up", "1/4.5", "percent", "at", "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season:", "2018-55", null, "projections", "NM", "Year", null, "2018-19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5.3", "0–86", "Cardinals", "12.6", null, null, "4", "0–86", "Cardinals", "5,332,708", "6.1", "4,303", "6.2", "5,028", "6,208,256", "9.", null, "Total:[51]", "team", "Pacific", "Division", "record", "West", "Division", "record", "907", "(1–16)", "911", "(8–10)", "14", "20", "116", "(8–13)", "15", null, "314", "(11", null, "21)", "925", null, "6–15)", "19", "25", "61", "(10–19)", null, "seasons"]}, {"t": 0.059, "pct": 94.1, "tokens": ["<|endoftext|>", "2015:", "$141,938", "versus;", "2016:", "$337,", null, null, ".", "[49]", "On", "Sunday", "before", "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", "a", "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-2017", "stadium", "occupancy.", "During", "last", "year's", "campaign,", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", null, "went", "on", "to", "reach", "5", "5/", null, ".4%", "of", "regular", "season", "attendance,", "up", "1/4.5", "percent", "at", "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season:", "2018-55", null, "projections", "NM", "Year", null, "2018-19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5.3", "0–86", "Cardinals", "12.6", null, ".4", "0–86", "Cardinals", "5,332,708", "6.1", "4,303", "6.2", "5,028", "6,208,256", "9.", null, "Total:[51]", "team", "Pacific", "Division", "record", "West", "Division", "record", "907", "(1–16)", "911", "(8–10)", "14", "20", "116", "(8–13)", "15", "20", "314", "(11", null, "21)", "925", null, "6–15)", "19", "25", "61", "(10–19)", null, "seasons"]}, {"t": 0.039, "pct": 96.1, "tokens": ["<|endoftext|>", "2015:", "$141,938", "versus;", "2016:", "$337,7", null, ".", "[49]", "On", "Sunday", "before", "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", "a", "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", null, null, "the", "team's", "2015-2017", "stadium", "occupancy.", "During", "last", "year's", "campaign,", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", null, "went", "on", "to", "reach", "5", "5/4.4%", "of", "regular", "season", "attendance,", "up", "1/4.5", "percent", "at", "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season:", "2018-55", null, "projections", "NM", "Year", "(2018-19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5.3", "0–86", "Cardinals", "12.6", null, ".4", "0–86", "Cardinals", "5,332,708", "6.1", "4,303", "6.2", "5,028", "6,208,256", "9.7", "Total:[51]", "team", "Pacific", "Division", "record", "West", "Division", "record", "907", "(1–16)", "911", "(8–10)", "14", "20", "116", "(8–13)", "15", "20", "314", "(11–21)", "925", null, "6–15)", "19", "25", "61", "(10–19)", null, "seasons"]}, {"t": 0.019, "pct": 98.1, "tokens": ["<|endoftext|>", "2015:", "$141,938", "versus;", "2016:", "$337,746.", "[49]", "On", "Sunday", "before", "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", "a", "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", null, "with", "the", "team's", "2015-2017", "stadium", "occupancy.", "During", "last", "year's", "campaign,", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", "Cardinals", "went", "on", "to", "reach", "5", "5/4.4%", "of", "regular", "season", "attendance,", "up", "1/4.5", "percent", "at", "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season:", "2018-55", "NM", "projections", "NM", "Year", "(2018-19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5.3", "0–86", "Cardinals", "12.6", "5.4", "0–86", "Cardinals", "5,332,708", "6.1", "4,303", "6.2", "5,028", "6,208,256", "9.7", "Total:[51]", "team", "Pacific", "Division", "record", "West", "Division", "record", "907", "(1–16)", "911", "(8–10)", "14", "20", "116", "(8–13)", "15", "20", "314", "(11–21)", "925", null, "6–15)", "19", "25", "61", "(10–19)", "Regular", "seasons"]}, {"t": 0.009, "pct": 99.1, "tokens": ["<|endoftext|>", "2015:", "$141,938", "versus;", "2016:", "$337,746.", "[49]", "On", "Sunday", "before", "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", "a", "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", "associated", "with", "the", "team's", "2015-2017", "stadium", "occupancy.", "During", "last", "year's", "campaign,", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", "Cardinals", "went", "on", "to", "reach", "5", "5/4.4%", "of", "regular", "season", "attendance,", "up", "1/4.5", "percent", "at", "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season:", "2018-55", "NM", "projections", "NM", "Year", "(2018-19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5.3", "0–86", "Cardinals", "12.6", "5.4", "0–86", "Cardinals", "5,332,708", "6.1", "4,303", "6.2", "5,028", "6,208,256", "9.7", "Total:[51]", "team", "Pacific", "Division", "record", "West", "Division", "record", "907", "(1–16)", "911", "(8–10)", "14", "20", "116", "(8–13)", "15", "20", "314", "(11–21)", "925", "(6–15)", "19", "25", "61", "(10–19)", "Regular", "seasons"]}, {"t": 0.004, "pct": 99.6, "tokens": ["<|endoftext|>", "2015:", "$141,938", "versus;", "2016:", "$337,746.", "[49]", "On", "Sunday", "before", "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", "a", "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", "associated", "with", "the", "team's", "2015-2017", "stadium", "occupancy.", "During", "last", "year's", "campaign,", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", "Cardinals", "went", "on", "to", "reach", "5", "5/4.4%", "of", "regular", "season", "attendance,", "up", "1/4.5", "percent", "at", "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season:", "2018-55", "NM", "projections", "NM", "Year", "(2018-19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5.3", "0–86", "Cardinals", "12.6", "5.4", "0–86", "Cardinals", "5,332,708", "6.1", "4,303", "6.2", "5,028", "6,208,256", "9.7", "Total:[51]", "team", "Pacific", "Division", "record", "West", "Division", "record", "907", "(1–16)", "911", "(8–10)", "14", "20", "116", "(8–13)", "15", "20", "314", "(11–21)", "925", "(6–15)", "19", "25", "61", "(10–19)", "Regular", "seasons"]}, {"t": 0.0, "pct": 100.0, "tokens": ["<|endoftext|>", "2015:", "$141,938", "versus;", "2016:", "$337,746.", "[49]", "On", "Sunday", "before", "the", "12th", "game", "of", "preseason", "action,", "ESPN", "announced", "a", "new", "set", "of", "second-quarter", "projections", "for", "Buckman", "Field", "at", "Arizona's", "next", "fifth-season", "associated", "with", "the", "team's", "2015-2017", "stadium", "occupancy.", "During", "last", "year's", "campaign,", "ESPN's", "analysts", "predicted", "that", "128,000", "tickets", "for", "the", "Cardinals", "went", "on", "to", "reach", "5", "5/4.4%", "of", "regular", "season", "attendance,", "up", "1/4.5", "percent", "at", "Chase", "Field", "compared", "to", "all", "previous", "seasons.[50]", "Season:", "2018-55", "NM", "projections", "NM", "Year", "(2018-19)", "2,939,103", "3,071", "Cardinals", "7.0", "3,767,616", "5.3", "0–86", "Cardinals", "12.6", "5.4", "0–86", "Cardinals", "5,332,708", "6.1", "4,303", "6.2", "5,028", "6,208,256", "9.7", "Total:[51]", "team", "Pacific", "Division", "record", "West", "Division", "record", "907", "(1–16)", "911", "(8–10)", "14", "20", "116", "(8–13)", "15", "20", "314", "(11–21)", "925", "(6–15)", "19", "25", "61", "(10–19)", "Regular", "seasons"]}];let currentIdx = 0;
+let currentData = null;
+let isPlaying = false;
+let playInterval = null;
+let cells = [];
+
+function loadSnapshotData() {
+  const data = SNAPSHOT_DATA;
+  if (!data) {
+    document.getElementById('tokenGrid').innerHTML = '<div style="color:#a39c94;padding:20px;text-align:center;">正在加载数据...</div>';
+    return null;
+  }
+  return data;
+}
+
+function parseSnapshotText(text) {
+  var lines = text.split('\n');
+  var rowMap = {};
+
+  lines.forEach(function(line) {
+    var m = line.match(/^t=([0-9.]+)/);
+    if (!m) return;
+
+    var t = parseFloat(m[1]);
+    var idx = line.indexOf('):');
+    if (idx === -1) return;
+    var body = line.substring(idx + 2).trim();
+
+    var segments = body.split(/(\[MASK\])/);
+    var tokens = [];
+    segments.forEach(function(seg) {
+      if (seg === '[MASK]') {
+        tokens.push(null);
+      } else if (seg.trim()) {
+        seg.trim().split(/\s+/).forEach(function(w) { tokens.push(w); });
+      }
+    });
+
+    if (tokens.length === 0) return;
+    rowMap[t] = tokens;
+  });
+
+  var sorted = Object.keys(rowMap).map(parseFloat).sort(function(a, b) { return b - a; });
+
+  if (sorted.length < 2) {
+    throw new Error('格式错误：至少需要 2 个时间步，且每步需包含文本');
+  }
+
+  var data = sorted.map(function(t) {
+    var toks = rowMap[t];
+    return {
+      t: Math.round(t * 1000) / 1000,
+      pct: Math.round((1 - t) * 1000) / 10,
+      tokens: toks
+    };
+  });
+
+  return data;
+}
+
+function reinitializeAnimation(data, filename) {
+  stopPlay();
+  currentIdx = 0;
+  cleanSettle(document.getElementById('tokenGrid'));
+
+  document.getElementById('snapshotCount').textContent = data.length + ' snapshots';
+  document.getElementById('currentFile').textContent = filename || '';
+  document.getElementById('statStep').textContent = '0 / ' + (data.length - 1);
+  document.getElementById('statMask').textContent = '--';
+  document.getElementById('statRevealed').textContent = '--';
+
+  document.getElementById('subtitle').textContent = describeFile(filename);
+
+  currentData = data;
+  buildGrid(data);
+  renderStep(data, 0);
+}
+
+function describeFile(name) {
+  if (!name) return 'seed 42 · 1000步 · ddpm_cache';
+  var parts = name.replace('.txt', '').split('_');
+  if (parts[0] === 'snapshot' && parts[1] === 'seed')
+    return 'seed ' + parts[2] + ' · 1000步 · ddpm_cache · length=256';
+  if (parts[0] === 'snapshot' && parts[1] === 'steps')
+    return parts[2] + '步 · seed=42 · ddpm_cache · length=256';
+  if (parts[0] === 'snapshot' && parts[1] === 'length')
+    return 'length=' + parts[2] + ' · seed=123 · ddpm_cache';
+  return name;
+}
+
+function computeMaxTokenLengths(data, totalPos) {
+  var maxLens = [];
+  data.forEach(function(step) {
+    var limit = step.tokens.length < totalPos ? step.tokens.length : totalPos;
+    for (var i = 0; i < limit; i++) {
+      var tok = step.tokens[i];
+      var len = tok ? tok.length : 1;
+      if (!maxLens[i] || len > maxLens[i]) maxLens[i] = len;
+    }
+  });
+  return maxLens;
+}
+
+function buildGrid(data) {
+  var grid = document.getElementById('tokenGrid');
+  grid.innerHTML = '';
+  cells = [];
+
+  var totalPos = data[data.length - 1].tokens.length;
+  var maxLens = computeMaxTokenLengths(data, totalPos);
+
+  for (var i = 0; i < totalPos; i++) {
+    var cell = document.createElement('span');
+    cell.className = 'token mask';
+    cell.textContent = '\u25A0';
+    cell.title = 'Position ' + i + ': [MASK]';
+    cell.style.width = 'calc(' + (maxLens[i] + 1) + 'ch + 2px)';
+    cell.dataset.state = 'mask';
+    grid.appendChild(cell);
+    cells.push(cell);
+  }
+}
+
+function updatePhaseAndStats(step, data, idx, totalPos) {
+  var maskCount = 0;
+  var limit = step.tokens.length < totalPos ? step.tokens.length : totalPos;
+  for (var i = 0; i < limit; i++) {
+    if (step.tokens[i] === null) maskCount++;
+  }
+  var revealed = limit - maskCount;
+  var pct = limit > 0 ? (revealed / limit * 100).toFixed(0) : 0;
+
+  document.getElementById('timeLabel').textContent = 't = ' + step.t.toFixed(3) + ' \u00B7 ' + step.pct.toFixed(0) + '%';
+  document.getElementById('progressFill').style.width = ((1 - step.t) * 100) + '%';
+  document.getElementById('statStep').textContent = idx + ' / ' + (data.length - 1);
+  document.getElementById('statMask').textContent = maskCount;
+  document.getElementById('statRevealed').textContent = revealed + ' (' + pct + '%)';
+
+  var t = step.t;
+  toggleActive('phaseSeg0', t > 0.50);
+  toggleActive('phaseSeg1', t > 0.10 && t <= 0.50);
+  toggleActive('phaseSeg2', t <= 0.10);
+  toggleActive('phaseLabel0', t > 0.50);
+  toggleActive('phaseLabel1', t > 0.10 && t <= 0.50);
+  toggleActive('phaseLabel2', t <= 0.10);
+}
+
+function toggleActive(id, cond) {
+  var el = document.getElementById(id);
+  if (el) el.classList.toggle('active', cond);
+}
+
+function renderStep(data, idx) {
+  var step = data[idx];
+  if (!step) return;
+
+  var grid = document.getElementById('tokenGrid');
+  var totalPos = cells.length;
+  var limit = step.tokens.length < totalPos ? step.tokens.length : totalPos;
+  var allRevealed = true;
+
+  for (var i = 0; i < limit; i++) {
+    var cell = cells[i];
+    var tok = step.tokens[i];
+
+    if (tok === null) {
+      cell.className = 'token mask';
+      cell.textContent = '\u25A0';
+      cell.title = 'Position ' + i + ': [MASK]';
+      cell.dataset.state = 'mask';
+      allRevealed = false;
+    } else {
+      var display = tok.replace('<|endoftext|>', '\u00B6');
+      if (cell.dataset.state === 'mask') {
+        cell.className = 'token revealed';
+        cell.textContent = display;
+        cell.title = 'Position ' + i + ': "' + tok + '"';
+        cell.dataset.state = 'revealed';
+      } else {
+        if (cell.textContent !== display) {
+          cell.textContent = display;
+          cell.title = 'Position ' + i + ': "' + tok + '"';
+        }
+      }
+    }
+  }
+
+  if (allRevealed && idx === data.length - 1) {
+    animateSettle(grid);
+  } else {
+    cleanSettle(grid);
+  }
+
+  updatePhaseAndStats(step, data, idx, totalPos);
+}
+
+function animateSettle(grid) {
+  var old = grid.querySelector('.settle-text');
+  if (old) old.remove();
+
+  var parts = [];
+  cells.forEach(function(c) {
+    if (c.dataset.state === 'revealed') {
+      parts.push(c.textContent);
+    }
+  });
+  var text = parts.join(' ');
+
+  var overlay = document.createElement('div');
+  overlay.className = 'settle-text';
+  overlay.textContent = text;
+  grid.appendChild(overlay);
+
+  grid.classList.add('settled');
+
+  requestAnimationFrame(function() {
+    overlay.classList.add('visible');
+  });
+}
+
+function cleanSettle(grid) {
+  grid.classList.remove('settled');
+  var overlay = grid.querySelector('.settle-text');
+  if (overlay) overlay.remove();
+  cells.forEach(function(c) {
+    c.style.opacity = '';
+    c.style.transition = '';
+  });
+}
+
+function animate(data) {
+  if (isPlaying) {
+    if (currentIdx < data.length - 1) {
+      currentIdx++;
+      renderStep(data, currentIdx);
+    } else {
+      stopPlay();
+    }
+  }
+}
+
+function startPlay(data) {
+  if (currentIdx >= data.length - 1) {
+    currentIdx = 0;
+    renderStep(data, 0);
+  }
+  isPlaying = true;
+  var playBtn = document.getElementById('btnPlay');
+  playBtn.textContent = '\u23F8 Pause';
+  playBtn.className = 'primary playing';
+
+  var speed = parseInt(document.getElementById('speedSlider').value);
+  var interval = Math.max(100, 800 - speed * 70);
+
+  if (playInterval) clearInterval(playInterval);
+  playInterval = setInterval(function() { animate(data); }, interval);
+}
+
+function stopPlay() {
+  isPlaying = false;
+  var playBtn = document.getElementById('btnPlay');
+  playBtn.textContent = '\u25B6 Play';
+  playBtn.className = 'primary';
+  if (playInterval) {
+    clearInterval(playInterval);
+    playInterval = null;
+  }
+}
+
+function togglePlay(data) {
+  if (isPlaying) stopPlay();
+  else startPlay(data);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var data = loadSnapshotData();
+  if (!data || data.length === 0) {
+    document.getElementById('tokenGrid').innerHTML = '<div style="width:100%;padding:20px;text-align:center;color:#a39c94;">请先用 plot_snapshot_animation.py 生成数据</div>';
+    return;
+  }
+
+  reinitializeAnimation(data, '');
+
+  function withData(fn) {
+    return function() { fn(currentData); };
+  }
+
+  document.getElementById('btnPlay').addEventListener('click', withData(togglePlay));
+  document.getElementById('btnNext').addEventListener('click', withData(function(d) {
+    stopPlay();
+    if (currentIdx < d.length - 1) { currentIdx++; renderStep(d, currentIdx); }
+  }));
+  document.getElementById('btnPrev').addEventListener('click', withData(function(d) {
+    stopPlay();
+    if (currentIdx > 0) { currentIdx--; renderStep(d, currentIdx); }
+  }));
+  document.getElementById('btnReset').addEventListener('click', withData(function(d) {
+    stopPlay();
+    currentIdx = 0;
+    renderStep(d, 0);
+  }));
+
+  document.getElementById('progressTrack').addEventListener('click', function(e) {
+    stopPlay();
+    var rect = e.currentTarget.getBoundingClientRect();
+    var pct = (e.clientX - rect.left) / rect.width;
+    currentIdx = Math.round(pct * (currentData.length - 1));
+    renderStep(currentData, currentIdx);
+  });
+
+  document.getElementById('speedSlider').addEventListener('input', function(e) {
+    var val = e.target.value;
+    document.getElementById('speedLabel').textContent = val + '\u00D7';
+    if (isPlaying) {
+      stopPlay();
+      startPlay(currentData);
+    }
+  });
+
+  document.getElementById('btnLoadFile').addEventListener('click', function() {
+    document.getElementById('fileInput').click();
+  });
+
+  document.getElementById('fileInput').addEventListener('change', function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var parsed = parseSnapshotText(ev.target.result);
+        reinitializeAnimation(parsed, file.name);
+      } catch (err) {
+        document.getElementById('tokenGrid').innerHTML = '<div style="width:100%;padding:20px;text-align:center;color:#b64f35;">文件解析失败: ' + err.message + '</div>';
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (!currentData) return;
+    if (e.key === ' ' || e.key === 'Space') { e.preventDefault(); togglePlay(currentData); }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault(); stopPlay();
+      if (currentIdx < currentData.length - 1) { currentIdx++; renderStep(currentData, currentIdx); }
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault(); stopPlay();
+      if (currentIdx > 0) { currentIdx--; renderStep(currentData, currentIdx); }
+    }
+  });
+});
+</script>
+</body>
+</html>

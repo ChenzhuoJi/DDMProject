@@ -16,16 +16,26 @@ __pycache__/
 .venv/
 venv/
 
+# opencode agent
+.opencode/
+
 # 工作文档
 论文研读选题表.docx
+
+# 报告草稿
+Draft/
 研究报告大纲.md
 reference.bib
 tex/
 
 # 05_MDLM 实验产物（不提交）
-05_MDLM/experiments/docs/figures/
-05_MDLM/experiments/snapshots/csv/
-05_MDLM/experiments/text8/checkpoint/
 05_MDLM/notebooks/
 05_MDLM/**/*.zip
 05_MDLM/**/*.csv
+
+# experiments 产物（不提交）
+experiments/**/figures/
+experiments/**/csv/
+experiments/**/checkpoint/
+experiments/**/*.zip
+experiments/**/*.csv
